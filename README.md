@@ -1,5 +1,7 @@
 # Hearth Calendar
 
+**Website:** https://jewaldt27.github.io/hearth-calendar/
+
 A self-hosted family wall calendar in the style of Skylight. Runs on your own Ubuntu server with Docker. You use it from any web browser, and a tablet or monitor on the wall can run the full-screen display.
 
 **Install on Ubuntu or Debian with one command:**
