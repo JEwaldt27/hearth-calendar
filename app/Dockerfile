@@ -1,6 +1,8 @@
 FROM node:22-alpine
 
-LABEL org.opencontainers.image.title="Hearth Calendar" \n      org.opencontainers.image.description="Self-hosted family wall calendar with two-way Google, Outlook and iCloud sync, chores, lists and meal planning" \n      org.opencontainers.image.source="https://github.com/JEwaldt27/hearth-calendar"
+LABEL org.opencontainers.image.title="Hearth Calendar" \
+      org.opencontainers.image.description="Self-hosted family wall calendar with two-way Google, Outlook and iCloud sync, chores, lists and meal planning" \
+      org.opencontainers.image.source="https://github.com/JEwaldt27/hearth-calendar"
 
 ENV NODE_ENV=production
 WORKDIR /app
