@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Deploys Hearth to the server: database backup, copy files, rebuild, health check.
+  Deploys Hearth to the server: database backup, copy files, rebuild, health check,
+  then copies new nightly backups to this PC.
 
 .EXAMPLE
   .\deploy.cmd

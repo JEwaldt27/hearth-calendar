@@ -106,7 +106,7 @@ export function openEventDetails(ev, ctx) {
       birthdayAge(ev, cal) ? h('p', {}, `🎉 Turns ${birthdayAge(ev, cal)}`) : null,
       ev.description && !(cal?.managed === 'birthdays') ? h('p', { class: 'details-notes' }, ev.description) : null,
       cal?.managed === 'birthdays' ? h('p', { class: 'hint' }, 'Birthdays come from Settings → Family members.') : null,
-      cal && !cal.writable ? h('p', { class: 'hint' }, cal.source === 'ics' ? 'This calendar is a read-only subscription.' : 'You have view-only access to this calendar.') : null,
+      cal && !cal.writable && !cal.managed ? h('p', { class: 'hint' }, cal.source === 'ics' ? 'This calendar is a read-only subscription.' : 'You have view-only access to this calendar.') : null,
     ),
     actions: canEdit
       ? [

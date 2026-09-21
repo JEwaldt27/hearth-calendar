@@ -4,7 +4,7 @@ A self-hosted family wall calendar in the style of Skylight. Runs on your own Ub
 
 - **Accounts.** Everyone gets their own login. The first account becomes the admin.
 - **Calendars.** Make calendars inside Hearth, subscribe to read-only ICS links, or **link iCloud, Google, Outlook / Microsoft 365, Fastmail, Nextcloud, or any CalDAV account with two-way sync**. Events you add or edit in Hearth are pushed back to that calendar, so they show up on your phone.
-- **Sharing.** Share any calendar or chore list with another account as *view* or *edit*. Each person decides which of their calendars appear in their own view and on their wall displays, and can give shared calendars their own colour.
+- **Sharing.** Share any calendar or list (chores, groceries, meal plans) with another account as *view* or *edit*. Each person decides which of their calendars appear in their own view and on their wall displays, and can give shared calendars their own colour.
 - **Family members.** Profiles with a colour and emoji (kids don't need accounts). Calendars and chores belong to a person, and you can filter by person.
 - **Recurring events.** Daily, weekly (chosen days), monthly, and yearly, with an end date or a repeat count. You can edit or delete *one occurrence*, *this and following*, or *the whole series*. Times stay correct across daylight saving changes.
 - **Calendar tools.** Day, week, month and schedule views; search (🔍); a quick-add bar that understands "Soccer Tuesday 5pm" or "Dentist 9/30 at 3:15"; drag an event to another day or time; countdowns ("12 days until Disney") pinned above the calendar; automatic birthdays from family profiles (with ages); and public holiday calendars.
@@ -14,20 +14,23 @@ A self-hosted family wall calendar in the style of Skylight. Runs on your own Ub
 - **Phone app.** Install Hearth to your home screen (Android, iPhone, or desktop Chrome/Edge) for its own icon, full-screen window and bottom tab bar. The app shell opens even without a connection; your calendar data is never cached on the device.
 - **Reminders.** Push notifications on phones and computers before events, for all-day events in the morning, and for chores still open in the evening.
 - **Phone calendar links.** A private, read-only subscribe link per calendar (or all of them) for the iPhone, Google or Outlook calendar apps.
-- **Wall display mode.** Big clock, week/month/schedule views, a chore panel and grocery lists you can tap to check off, filter chips for each person, and optional adding and editing. The screen stays awake, returns to today when left idle, and signs in with a revocable link instead of a password. Optional extras: weather, an "up next" card, meals, stars, countdowns, night mode (dims on a schedule), a photo frame when idle, and a portrait layout for a tablet on its side.
+- **Wall display mode.** Big clock, day/week/month/schedule views, a chore panel and grocery lists you can tap to check off, filter chips for each person, and optional adding and editing. The screen stays awake, returns to today when left idle, and signs in with a revocable link instead of a password. Optional extras: weather, an "up next" card, meals, stars, countdowns, night mode (dims on a schedule), a photo frame when idle, and a portrait layout for a tablet on its side.
 - **Looking after itself.** An admin health page (backups, disk space, sync problems, version), email/push alerts when something breaks, and a script that copies the nightly backups to your PC.
 
 ## Architecture
 
 ```
 docker compose
-├── db     postgres:17        data in the "db-data" volume
-├── app    Node 22 + Express  API + static web app on :3000 (host :8080)
-└── caddy  (optional)         automatic HTTPS on 80/443
+├── db           postgres:17        data in the "db-data" volume
+├── app          Node 22 + Express  API + static web app on :3000 (host :8080)
+├── backup       postgres:17        nightly database dumps into ./backups
+├── caddy        (profile https)    automatic HTTPS on 80/443
+└── cloudflared  (profile tunnel)   Cloudflare Tunnel, no open ports
 ```
 
 - `app/src/calendar`: every event is stored as its original iCalendar resource (`calendar_objects`). A derived `events` table is used for fast queries, and recurring events are expanded on request. Edits to linked calendars rewrite only the changed properties, so alarms, attendees, and other data from the other app are kept.
-- `app/src/sync`: ICS feed polling, CalDAV sync (ctag/etag based, via `tsdav`), and Google OAuth. Linked calendars sync every 15 minutes (configurable). Writes go to the remote server first and use `If-Match`, so a change made on your phone is never silently overwritten.
+- `app/src/sync`: ICS feed polling, CalDAV sync (ctag/etag based, via `tsdav`), Google (OAuth + CalDAV), and Outlook / Microsoft 365 (OAuth + Microsoft Graph, converted to and from iCalendar). Linked calendars sync every 15 minutes (configurable). Writes go to the remote server first and use `If-Match`, so a change made on your phone is never silently overwritten.
+- `app/src/lib`: accounts, email, push reminders, morning summaries, weather, birthdays, and the health checks and alerts. Background jobs run inside the app; there is no separate worker.
 - `app/public`: plain JavaScript with no build step. `/` is the app, `/display` is the wall display, `/login` is the sign-in page.
 
 ## Install on Ubuntu
@@ -61,7 +64,7 @@ docker compose logs -f app     # wait for "Hearth Calendar listening"
 
 Open `BASE_URL` (for example `http://192.168.1.50:8080`) and create the first account. That account is the administrator.
 
-**4. (Recommended) HTTPS.** HTTPS is needed if you use it outside your home network, and for Google sign-in.
+**4. (Recommended) HTTPS.** HTTPS is needed if you use it outside your home network, and for Google and Outlook linking, push reminders, and installing Hearth as a phone app.
 
 Point a DNS name at the server, open ports 80 and 443, then in `.env` set:
 
@@ -174,9 +177,9 @@ From the project folder on your PC:
 .\deploy.cmd
 ```
 
-It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, rebuilds, and waits until Hearth reports healthy. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`. It warns if you have changes not yet committed to git.
+It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, stamps the git commit as the version (shown in **Settings → Server health**), rebuilds, waits until Hearth reports healthy, and then copies any new nightly backups to your PC. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`. It warns if you have changes not yet committed to git.
 
-To avoid typing the server password twice per deploy, set up an SSH key once:
+To avoid typing the server password several times per deploy (and to let scheduled backup copies run on their own), set up an SSH key once:
 
 ```powershell
 ssh-keygen -t ed25519
@@ -228,23 +231,31 @@ Keep a copy of `.env` with your backups: `APP_SECRET` is required to decrypt sav
 | --- | --- | --- |
 | `APP_SECRET` | required | Session and credential encryption key (32+ chars) |
 | `POSTGRES_PASSWORD` | required | Database password (use hex; it is placed in a URL) |
-| `BASE_URL` | `http://localhost:8080` | Public URL; sets secure cookies and the Google redirect |
+| `BASE_URL` | `http://localhost:8080` | Public URL; sets secure cookies, links in emails, and the Google/Outlook redirects |
 | `ALLOW_SIGNUP` | `false` | Allow self-registration after the first account |
-| `DEFAULT_TIMEZONE` | `America/Chicago` | Used for feeds with floating times |
+| `DEFAULT_TIMEZONE` | `America/Chicago` | Household time zone: reminders, morning summaries, backups, Outlook times, and feeds that don't name one |
 | `SYNC_INTERVAL_MINUTES` | `15` | How often linked calendars and feeds refresh |
 | `SYNC_PAST_DAYS` / `SYNC_FUTURE_DAYS` | `365` / `1095` | Window of linked-calendar events kept in sync |
 | `BLOCK_PRIVATE_NETWORKS` | `false` | Reject calendar URLs on private IP ranges |
 | `APP_PORT` / `APP_BIND` | `8080` / `0.0.0.0` | Host port and interface for the app |
+| `DOMAIN` | empty | Domain for the Caddy HTTPS profile |
+| `CLOUDFLARE_TUNNEL_TOKEN` | empty | Token for the Cloudflare Tunnel profile |
+| `COOKIE_SECURE` | on when `BASE_URL` is https | Force `Secure` cookies on or off |
+| `TRUST_PROXY` | `true` | Trust `X-Forwarded-*` from a proxy on the same machine or private network (Caddy, cloudflared) |
+| `SESSION_DAYS` | `30` | How long a sign-in lasts |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty | Enables Google linking |
 | `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | empty | Enables Outlook / Microsoft 365 linking |
 | `MS_TENANT` | `common` | Set to your organisation's tenant ID to allow only its work accounts |
 | `BACKUP_TIME` / `BACKUP_KEEP_DAYS` | `03:00` / `14` | Nightly backup time and retention |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` / `DIGEST_HOUR` | empty | Fallback email settings; normally set in **Settings → Email** instead |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` / `DIGEST_HOUR` | empty | Fallback email settings; normally set in **Settings → Email** instead |
+
+Weather location and units, email, and problem alerts are set in the app (Settings → Household, Email and Server health), not in `.env`.
 
 ## Security notes
 
 - Passwords are hashed with scrypt. Sessions are random tokens stored hashed, in `HttpOnly`, `SameSite=Lax` cookies. Every state-changing request needs a custom header (CSRF protection).
 - CalDAV passwords and Google/Microsoft refresh tokens are encrypted with AES-256-GCM at rest.
+- Microsoft and Google tokens are only ever sent to Microsoft and Google. Phone subscribe links are long random tokens stored hashed; making a new link cuts off the old one.
 - Display links are long random tokens stored hashed. They can only view calendars and lists marked for displays, tick chores, and (if allowed) edit events. They cannot change settings or sharing.
 - Login and registration are rate-limited. The server refuses to fetch loopback and link-local addresses, and can refuse the whole LAN too (`BLOCK_PRIVATE_NETWORKS=true`).
 - If the server is reachable from the internet, use HTTPS and keep `ALLOW_SIGNUP=false`.
@@ -256,6 +267,8 @@ cd app
 npm install
 APP_SECRET=$(openssl rand -hex 32) DATABASE_URL=postgres://user:pass@localhost:5432/hearth npm run dev
 ```
+
+`npm run dev` restarts on file changes. Database migrations in `app/src/migrations` run automatically at startup. The front end has no build step: edit `app/public` and reload.
 
 ## Known limitations
 

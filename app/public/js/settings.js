@@ -305,7 +305,7 @@ function calendarForm(app, cal, { source = 'local', account, remote } = {}) {
         ? field(
             'Calendar link (ICS)',
             url,
-            'Read-only. Google: Settings → calendar → “Secret address in iCal format”. Outlook: Settings → Shared calendars → Publish. To add and edit events here, link the account instead.',
+            'Read-only. Google: Settings → calendar → “Secret address in iCal format”. Outlook: Settings → Shared calendars → Publish. To add and edit events here, link the account in Linked accounts instead.',
           )
         : null,
       field('Name', name),
