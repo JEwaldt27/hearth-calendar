@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hearth Calendar</title>
+<meta name="description" content="A self-hosted family wall calendar: shared calendars with two-way Google, Outlook and iCloud sync, chores with stars, grocery lists and meal planning. One-command Docker install.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='110' fill='%23e0763b'/%3E%3Cg transform='translate(256 262)'%3E%3Crect x='-150' y='-138' width='300' height='276' rx='44' fill='%23fff'/%3E%3Cpath d='M-150 -94a44 44 0 0 1 44-44h212a44 44 0 0 1 44 44v34h-300z' fill='%23ffd9c2'/%3E%3Ccircle cx='-72' cy='16' r='26' fill='%23e0763b'/%3E%3Ccircle cx='0' cy='16' r='26' fill='%235bb974'/%3E%3Ccircle cx='72' cy='16' r='26' fill='%233fa7d6'/%3E%3Ccircle cx='-72' cy='84' r='26' fill='%23e5c134'/%3E%3Ccircle cx='0' cy='84' r='26' fill='%23e56fa5'/%3E%3Ccircle cx='72' cy='84' r='26' fill='%23ebe3d8'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@500&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+  :root {
+    --paper: #faf6f0;
+    --paper-2: #f3ece2;
+    --card: #ffffff;
+    --ink: #2a241f;
+    --ink-2: #5d544c;
+    --muted: #8a7f74;
+    --line: #e8dfd3;
+    --ember: #e0763b;
+    --ember-deep: #c2591f;
+    --ember-ink: #ffffff;
+    --ember-soft: #fde9dc;
+    --glow: rgba(240, 138, 80, 0.34);
+    --sage: #5bb974;
+    --sky: #3fa7d6;
+    --marigold: #e5c134;
+    --rose: #e56fa5;
+    --bezel: #221d19;
+    --shadow: 0 1px 2px rgba(60, 40, 20, 0.06), 0 10px 30px rgba(60, 40, 20, 0.08);
+    --shadow-lg: 0 30px 80px -20px rgba(60, 35, 15, 0.35);
+    /* The wall-display band is an evening kitchen in both themes. */
+    --band: #1c1714;
+    --band-2: #26201b;
+    --band-ink: #f3ece4;
+    --band-muted: #b5a99c;
+    --display: 'Bricolage Grotesque', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+    --body: 'Nunito', ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+    --shot-light: block;
+    --shot-dark: none;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #161412;
+      --paper-2: #1d1a17;
+      --card: #221e1b;
+      --ink: #f3ece4;
+      --ink-2: #cfc5ba;
+      --muted: #9a8f84;
+      --line: #35302b;
+      --ember: #f08a50;
+      --ember-deep: #f4a06f;
+      --ember-ink: #1b1410;
+      --ember-soft: #3a281c;
+      --glow: rgba(240, 138, 80, 0.22);
+      --bezel: #0b0908;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+      --band: #0f0d0b;
+      --band-2: #1a1613;
+      --shot-light: none;
+      --shot-dark: block;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #161412;
+    --paper-2: #1d1a17;
+    --card: #221e1b;
+    --ink: #f3ece4;
+    --ink-2: #cfc5ba;
+    --muted: #9a8f84;
+    --line: #35302b;
+    --ember: #f08a50;
+    --ember-deep: #f4a06f;
+    --ember-ink: #1b1410;
+    --ember-soft: #3a281c;
+    --glow: rgba(240, 138, 80, 0.22);
+    --bezel: #0b0908;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+    --band: #0f0d0b;
+    --band-2: #1a1613;
+    --shot-light: none;
+    --shot-dark: block;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: inherit; }
+  h1, h2, h3 { font-family: var(--display); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -0.02em; }
+  p { margin: 0; }
+  :focus-visible { outline: 3px solid var(--ember); outline-offset: 3px; border-radius: 6px; }
+
+  .wrap { width: 100%; max-width: 1180px; margin-inline: auto; padding-inline: 24px; }
+  .shot-light { display: var(--shot-light); }
+  .shot-dark { display: var(--shot-dark); }
+
+  /* The family dots from the app icon: one per person. */
+  .dots { display: inline-flex; gap: 5px; vertical-align: middle; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: var(--ember); }
+  .dots i:nth-child(2) { background: var(--sage); }
+  .dots i:nth-child(3) { background: var(--sky); }
+  .dots i:nth-child(4) { background: var(--marigold); }
+  .dots i:nth-child(5) { background: var(--rose); }
+
+  .eyebrow {
+    font-family: var(--body);
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ember-deep);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Nav */
+  .nav {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: color-mix(in srgb, var(--paper) 86%, transparent);
+    backdrop-filter: saturate(1.4) blur(12px);
+    -webkit-backdrop-filter: saturate(1.4) blur(12px);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+  .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 21px; text-decoration: none; letter-spacing: -0.02em; }
+  .brand svg { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-links { display: flex; gap: 24px; margin-left: auto; font-weight: 700; font-size: 15px; }
+  .nav-links a { text-decoration: none; color: var(--ink-2); }
+  .nav-links a:hover { color: var(--ink); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: 800 15px/1 var(--body);
+    padding: 13px 20px; border-radius: 999px; text-decoration: none; cursor: pointer;
+    border: 1.5px solid var(--line); background: var(--card); color: var(--ink);
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--muted); }
+  .btn.primary { background: var(--ember); border-color: var(--ember); color: var(--ember-ink); }
+  .btn.primary:hover { background: var(--ember-deep); border-color: var(--ember-deep); }
+  .btn svg { width: 18px; height: 18px; }
+  .nav .btn { padding: 9px 16px; font-size: 14px; }
+
+  /* Hero */
+  .hero { position: relative; overflow: hidden; padding-block: 72px 40px; }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: auto -10% -30% -10%;
+    height: 80%;
+    background: radial-gradient(ellipse 50% 60% at 50% 70%, var(--glow), transparent 70%);
+    pointer-events: none;
+  }
+  .hero-copy { position: relative; max-width: 780px; margin-inline: auto; text-align: center; display: grid; justify-items: center; gap: 22px; }
+  .hero h1 { font-size: clamp(44px, 7.4vw, 92px); font-weight: 800; letter-spacing: -0.035em; }
+  .hero h1 em { font-style: normal; color: var(--ember); }
+  .lede { font-size: clamp(18px, 2vw, 21px); color: var(--ink-2); max-width: 640px; }
+  .hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+
+  .install {
+    width: 100%; max-width: 720px;
+    display: flex; align-items: stretch;
+    background: var(--bezel); color: #f3ece4;
+    border-radius: 16px; overflow: hidden;
+    box-shadow: var(--shadow);
+    text-align: left;
+  }
+  .install code {
+    flex: 1; min-width: 0;
+    font: 500 14px/1.5 var(--mono);
+    padding: 15px 18px;
+    white-space: nowrap; overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .install code .p { color: #f08a50; user-select: none; }
+  .install code .d { color: #b5a99c; }
+  .copy {
+    flex: none; border: 0; cursor: pointer;
+    background: #3a312a; color: #f3ece4;
+    font: 800 13px/1 var(--body); padding: 0 18px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .copy:hover { background: #4a3f36; }
+  .copy svg { width: 16px; height: 16px; }
+  .hint { font-size: 14px; color: var(--muted); }
+
+  /* The tablet on the wall */
+  .mount { position: relative; margin-top: 56px; display: grid; justify-items: center; }
+  .tablet {
+    position: relative;
+    width: min(100%, 1040px);
+    padding: clamp(10px, 1.6vw, 20px);
+    background: var(--bezel);
+    border-radius: clamp(18px, 2.6vw, 34px);
+    box-shadow: var(--shadow-lg), inset 0 0 0 1.5px rgba(255, 255, 255, 0.06);
+  }
+  .tablet::after {
+    /* front camera */
+    content: '';
+    position: absolute; top: 50%; right: clamp(4px, 0.7vw, 8px);
+    width: 6px; height: 6px; border-radius: 50%; background: #3a322c;
+    transform: translateY(-50%);
+  }
+  .tablet img { border-radius: clamp(6px, 1vw, 12px); width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+  .cable {
+    width: 10px; height: 70px; margin-top: -2px;
+    background: linear-gradient(90deg, #d8cfc4, #efe8df, #d8cfc4);
+    border-radius: 0 0 6px 6px;
+    opacity: 0.8;
+  }
+  .caption { font-size: 14px; color: var(--muted); text-align: center; margin-top: 14px; }
+
+  section { padding-block: 96px; }
+  .section-head { display: grid; gap: 14px; max-width: 720px; margin-bottom: 44px; }
+  .section-head h2 { font-size: clamp(34px, 4.6vw, 56px); font-weight: 800; }
+  .section-head p { font-size: 19px; color: var(--ink-2); }
+
+  /* Family strip */
+  .family { padding-block: 64px; border-block: 1px solid var(--line); background: var(--paper-2); }
+  .family .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 48px; align-items: center; }
+  .family h2 { font-size: clamp(30px, 3.6vw, 44px); font-weight: 800; }
+  .family p { color: var(--ink-2); margin-top: 14px; }
+  .people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .person {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--card); border-radius: 18px; padding: 14px 16px;
+    box-shadow: var(--shadow);
+    border-left: 6px solid var(--c);
+  }
+  .avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--c); display: grid; place-items: center; font-size: 22px; flex: none; }
+  .person strong { font-family: var(--display); font-size: 19px; display: block; line-height: 1.2; }
+  .person small { color: var(--muted); font-size: 14px; }
+
+  /* Feature grid */
+  .features { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px; }
+  .feature {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow: hidden;
+  }
+  .feature h3 { font-size: 26px; font-weight: 700; }
+  .feature p { color: var(--ink-2); }
+  .feature .tag { font-weight: 800; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c, var(--ember-deep)); }
+  .f-cal { grid-column: span 6; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr); gap: 32px; align-items: center; padding-right: 0; padding-bottom: 0; }
+  .f-cal .copy-col { display: grid; gap: 14px; padding-bottom: 28px; }
+  .f-cal .frame { border-radius: 14px 0 0 0; overflow: hidden; border: 1px solid var(--line); border-right: 0; border-bottom: 0; box-shadow: var(--shadow); }
+  .f-sync, .f-remind { grid-column: span 3; }
+  .f-chores, .f-lists, .f-meals { grid-column: span 2; padding-bottom: 0; }
+  .phone {
+    margin-top: auto;
+    align-self: center;
+    width: min(100%, 250px);
+    padding: 9px 9px 0;
+    background: var(--bezel);
+    border-radius: 34px 34px 0 0;
+  }
+  .phone img { border-radius: 26px 26px 0 0; aspect-ratio: 780 / 1100; object-fit: cover; object-position: top; }
+  .bullets { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; }
+  .bullets li { display: flex; gap: 10px; align-items: baseline; color: var(--ink-2); }
+  .bullets li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--ember)); flex: none; transform: translateY(-1px); }
+
+  .providers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .provider { font-weight: 800; font-size: 14px; padding: 7px 13px; border-radius: 999px; background: var(--paper-2); border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 7px; }
+  .provider b { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .provider.two b { color: var(--sage); }
+
+  .times { display: grid; gap: 10px; margin-top: 6px; }
+  .note {
+    display: flex; gap: 12px; align-items: center;
+    background: var(--paper-2); border-radius: 16px; padding: 12px 14px;
+    border: 1px solid var(--line);
+  }
+  .note .ic { width: 36px; height: 36px; border-radius: 10px; background: var(--ember); flex: none; display: grid; place-items: center; }
+  .note .ic svg { width: 20px; height: 20px; }
+  .note strong { display: block; font-size: 15px; line-height: 1.3; }
+  .note small { color: var(--muted); font-size: 13.5px; }
+
+  /* Wall display band */
+  .band { background: var(--band); color: var(--band-ink); position: relative; overflow: hidden; }
+  .band::before {
+    content: ''; position: absolute; inset: -20% -10% auto auto; width: 70%; height: 90%;
+    background: radial-gradient(closest-side, rgba(240, 138, 80, 0.22), transparent);
+    pointer-events: none;
+  }
+  .band .section-head p { color: var(--band-muted); }
+  .band .eyebrow { color: #f4a06f; }
+  .band-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.7fr); gap: 28px; align-items: end; }
+  .band .tablet { width: 100%; background: #070605; }
+  .band .tablet.portrait img { aspect-ratio: 834 / 1194; }
+  .display-points { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 36px; margin-top: 56px; }
+  .display-points h3 { font-size: 20px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .display-points h3 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: block; }
+  .display-points p { color: var(--band-muted); font-size: 16px; }
+
+  /* Self-hosted */
+  .own { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: start; }
+  .own .section-head { margin-bottom: 0; }
+  .facts { display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .fact { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; padding-block: 20px; border-bottom: 1px solid var(--line); }
+  .fact dt { font-family: var(--display); font-weight: 700; font-size: 19px; }
+  .fact dd { margin: 0; color: var(--ink-2); }
+
+  /* Install */
+  .install-section { background: var(--paper-2); border-top: 1px solid var(--line); }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: step; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 26px; display: grid; gap: 10px; align-content: start; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    width: 38px; height: 38px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--ember-soft); color: var(--ember-deep);
+    font: 800 18px/1 var(--display);
+  }
+  .step h3 { font-size: 22px; font-weight: 700; }
+  .step p { color: var(--ink-2); font-size: 16px; }
+  .step code { font: 500 13.5px/1.5 var(--mono); background: var(--paper-2); border: 1px solid var(--line); padding: 2px 7px; border-radius: 7px; }
+  .install-wide { margin-top: 28px; display: grid; justify-items: center; gap: 12px; }
+  .reqs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font-size: 15px; color: var(--muted); }
+  .reqs span { display: inline-flex; align-items: center; gap: 8px; }
+  .reqs span::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+
+  /* FAQ */
+  .faq { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 56px; align-items: start; }
+  .faq .section-head { margin-bottom: 0; position: sticky; top: 100px; }
+  details { border-bottom: 1px solid var(--line); padding-block: 4px; }
+  details:first-of-type { border-top: 1px solid var(--line); }
+  summary {
+    cursor: pointer; list-style: none;
+    font-family: var(--display); font-weight: 700; font-size: 20px;
+    padding-block: 18px; display: flex; justify-content: space-between; gap: 16px; align-items: center;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; font: 500 26px/1 var(--body); color: var(--ember); transition: transform 0.2s ease; flex: none; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { color: var(--ink-2); padding-bottom: 20px; max-width: 62ch; }
+
+  /* Closing */
+  .closing { text-align: center; padding-block: 110px; position: relative; overflow: hidden; }
+  .closing::before { content: ''; position: absolute; inset: 30% -20% -40%; background: radial-gradient(ellipse 40% 50% at 50% 50%, var(--glow), transparent 70%); pointer-events: none; }
+  .closing .wrap { position: relative; display: grid; justify-items: center; gap: 22px; }
+  .closing h2 { font-size: clamp(38px, 5.6vw, 68px); font-weight: 800; max-width: 820px; }
+
+  footer { border-top: 1px solid var(--line); padding-block: 32px; font-size: 15px; color: var(--muted); }
+  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+  footer a { color: var(--ink-2); text-decoration: none; font-weight: 700; }
+  footer a:hover { color: var(--ink); }
+  footer .grow { flex: 1; }
+
+  @media (max-width: 960px) {
+    .f-cal { grid-template-columns: 1fr; padding: 28px 0 0 28px; }
+    .f-cal .copy-col { padding-right: 28px; padding-bottom: 0; }
+    .f-sync, .f-remind { grid-column: span 6; }
+    .f-chores, .f-lists, .f-meals { grid-column: span 3; }
+    .f-meals { grid-column: span 6; }
+    .family .wrap, .own, .faq { grid-template-columns: 1fr; gap: 32px; }
+    .faq .section-head { position: static; }
+    .band-grid { grid-template-columns: 1fr; }
+    .band .tablet.portrait { display: none; }
+    .display-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .steps { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .wrap { padding-inline: 16px; }
+    .nav-links a:not(.btn) { display: none; }
+    .hero { padding-block: 48px 28px; }
+    section { padding-block: 64px; }
+    .f-chores, .f-lists, .f-meals { grid-column: span 6; }
+    .people { grid-template-columns: 1fr; }
+    .display-points { grid-template-columns: 1fr; }
+    .fact { grid-template-columns: 1fr; gap: 4px; }
+    .cable { height: 44px; }
+    .install code { font-size: 12.5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .btn, summary::after { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Hearth home">
+      <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" fill="#e0763b"/><g transform="translate(256 262)"><rect x="-150" y="-138" width="300" height="276" rx="44" fill="#fff"/><path d="M-150 -94a44 44 0 0 1 44-44h212a44 44 0 0 1 44 44v34h-300z" fill="#ffd9c2"/><circle cx="-72" cy="16" r="26" fill="#e0763b"/><circle cx="0" cy="16" r="26" fill="#5bb974"/><circle cx="72" cy="16" r="26" fill="#3fa7d6"/><circle cx="-72" cy="84" r="26" fill="#e5c134"/><circle cx="0" cy="84" r="26" fill="#e56fa5"/><circle cx="72" cy="84" r="26" fill="#ebe3d8"/></g></svg>
+      Hearth
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#display">Wall display</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn" href="https://github.com/JEwaldt27/hearth-calendar">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div class="hero-copy">
+        <span class="eyebrow"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span> Self-hosted family calendar</span>
+        <h1 id="hero-title">Your family’s week, <em>on the wall.</em></h1>
+        <p class="lede">Hearth brings everyone’s calendars, chores, groceries and dinner plans together on a wall tablet, every phone and any browser. It runs on your own server, so there’s no subscription and no one else’s cloud.</p>
+        <div class="install" role="group" aria-label="Install command">
+          <code id="cmd"><span class="p">$ </span>curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh <span class="d">|</span> sudo bash</code>
+          <button class="copy" type="button" id="copy-hero" data-copy="curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh | sudo bash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <p class="hint">One command on Ubuntu or Debian. Installs Docker if needed, then asks two questions.</p>
+      </div>
+
+      <div class="mount">
+        <div class="tablet">
+          <img class="shot-light" src="img/display-landscape.webp" width="2200" height="1375" alt="Hearth's wall display: a large clock, the weather, the week's events colour-coded by family member, tonight's dinner and today's chores with stars.">
+          <img class="shot-dark" src="img/display-dark.webp" width="2200" height="1375" alt="Hearth's wall display in dark mode: clock, weather, the family's week, meals and chores.">
+        </div>
+        <div class="cable" aria-hidden="true"></div>
+        <p class="caption">The wall display on a kitchen tablet. The Parkers are a demo family.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="family">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">Everyone gets a colour</span>
+        <h2 style="margin-top:12px">One calendar for the whole house, with each person easy to spot.</h2>
+        <p>Give every family member a colour and an emoji. Their events, chores and stars wear it everywhere, and one tap shows just their day. Kids don’t need accounts or email addresses.</p>
+      </div>
+      <div class="people" role="list">
+        <div class="person" role="listitem" style="--c:#e0763b"><span class="avatar" aria-hidden="true">🌻</span><div><strong>Sam</strong><small>Yoga · Team offsite · Book club</small></div></div>
+        <div class="person" role="listitem" style="--c:#3fa7d6"><span class="avatar" aria-hidden="true">🎸</span><div><strong>Alex</strong><small>Gym · Dentist · Band practice</small></div></div>
+        <div class="person" role="listitem" style="--c:#e56fa5"><span class="avatar" aria-hidden="true">🦄</span><div><strong>Maya, 8</strong><small>Piano · Soccer · 34 ⭐ saved up</small></div></div>
+        <div class="person" role="listitem" style="--c:#5bb974"><span class="avatar" aria-hidden="true">🦖</span><div><strong>Leo, 5</strong><small>Swim lesson · Picture day</small></div></div>
+      </div>
+    </div>
+  </div>
+
+  <section id="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">What’s inside</span>
+        <h2 id="features-title">Everything the fridge whiteboard did, and a lot it couldn’t.</h2>
+      </div>
+
+      <div class="features">
+        <article class="feature f-cal">
+          <div class="copy-col">
+            <span class="tag">Calendar</span>
+            <h3>Plan the week together</h3>
+            <p>Day, week, month and schedule views that anyone in the house can read at a glance.</p>
+            <ul class="bullets">
+              <li>Type “Soccer Tuesday 5pm” and it lands on Tuesday at 5</li>
+              <li>Drag events to a new day or time</li>
+              <li>Repeating events, with “this and following” edits</li>
+              <li>Countdowns, birthdays with ages, and public holidays</li>
+            </ul>
+          </div>
+          <div class="frame">
+            <img class="shot-light" src="img/app-week-light.webp" width="2200" height="1375" loading="lazy" alt="Hearth's week view in a browser, with the quick-add bar, countdown chips for the pumpkin patch and beach trip, and filters for each family member.">
+            <img class="shot-dark" src="img/app-week-dark.webp" width="2200" height="1375" loading="lazy" alt="Hearth's week view in dark mode.">
+          </div>
+        </article>
+
+        <article class="feature f-sync" style="--c:var(--sage)">
+          <span class="tag">Two-way sync</span>
+          <h3>Keep the calendars you already use</h3>
+          <p>Link an account and its events show up in Hearth. Add or change something in Hearth and it’s written back, so it’s on your phone’s calendar too.</p>
+          <div class="providers">
+            <span class="provider two">Google <b>two-way</b></span>
+            <span class="provider two">Outlook &amp; Microsoft 365 <b>two-way</b></span>
+            <span class="provider two">iCloud <b>two-way</b></span>
+            <span class="provider two">Fastmail, Nextcloud, CalDAV <b>two-way</b></span>
+            <span class="provider">School &amp; team links <b>subscribe</b></span>
+          </div>
+        </article>
+
+        <article class="feature f-remind">
+          <span class="tag">On every phone</span>
+          <h3>A real app, with reminders</h3>
+          <p>Add Hearth to your home screen on iPhone or Android for its own icon and full-screen window, then turn on reminders for that device.</p>
+          <div class="times">
+            <div class="note"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><div><strong>Soccer practice in 30 minutes</strong><small>Maya · 5:00pm · Lincoln Park</small></div></div>
+            <div class="note"><span class="ic" aria-hidden="true" style="background:var(--sage)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><div><strong>3 chores still open tonight</strong><small>Practice piano, Brush teeth, Water the plants</small></div></div>
+          </div>
+        </article>
+
+        <article class="feature f-chores" style="--c:var(--rose)">
+          <span class="tag">Chores &amp; rewards</span>
+          <h3>Stars they can save up</h3>
+          <p>Daily chores per person that reset overnight. Kids earn stars and spend them on rewards you set.</p>
+          <div class="phone"><img src="img/phone-chores.webp" width="780" height="1688" loading="lazy" alt="The Chores tab on a phone: each person's chores for today, with star balances and progress rings."></div>
+        </article>
+
+        <article class="feature f-lists" style="--c:var(--marigold)">
+          <span class="tag">Lists</span>
+          <h3>Groceries, shared live</h3>
+          <p>Paste a whole list at once, tap to check off, and re-add your usuals in one go. See who added what.</p>
+          <div class="phone"><img src="img/phone-lists.webp" width="780" height="1688" loading="lazy" alt="A shared grocery list on a phone, with items to tap off and checked items crossed out."></div>
+        </article>
+
+        <article class="feature f-meals" style="--c:var(--sky)">
+          <span class="tag">Meals</span>
+          <h3>Dinner, decided</h3>
+          <p>Plan the week’s meals, reuse old favourites, and send the ingredients straight to the grocery list.</p>
+          <div class="phone"><img src="img/phone-meals.webp" width="780" height="1688" loading="lazy" alt="The meal planner on a phone, showing breakfast, lunch and dinner for each day of the week."></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="display" aria-labelledby="display-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Wall display</span>
+        <h2 id="display-title">Made for the old tablet in the drawer.</h2>
+        <p>Open a display link on any tablet, monitor or Raspberry Pi and it becomes the family board. It stays awake, drifts back to today when nobody’s touching it, and needs no password on the device.</p>
+      </div>
+      <div class="band-grid">
+        <div class="tablet"><img src="img/display-dark.webp" width="2200" height="1375" loading="lazy" alt="The wall display in dark mode on a landscape tablet."></div>
+        <div class="tablet portrait"><img src="img/display-portrait.webp" width="1100" height="1575" loading="lazy" alt="The wall display on a tablet mounted in portrait, with the calendar on top and meals, chores and lists below."></div>
+      </div>
+      <div class="display-points">
+        <div><h3><i style="--c:var(--marigold)"></i>Weather and up next</h3><p>Today’s forecast beside the clock, and a card for whatever’s coming up in the next few hours.</p></div>
+        <div><h3><i style="--c:var(--rose)"></i>Tap to tick off</h3><p>Chores and grocery items check off right on the screen. Stars count up as the kids finish.</p></div>
+        <div><h3><i style="--c:var(--sky)"></i>Night mode</h3><p>Dims to a quiet clock on the hours you choose, so the kitchen isn’t lit up at midnight.</p></div>
+        <div><h3><i style="--c:var(--sage)"></i>Photo frame</h3><p>When no one’s using it, it becomes a slideshow of your family photos.</p></div>
+        <div><h3><i style="--c:var(--ember)"></i>Portrait or landscape</h3><p>Mount it either way. The layout rearranges itself when the screen turns.</p></div>
+        <div><h3><i style="--c:#ebe3d8"></i>Choose what shows</h3><p>Pick which calendars and lists appear, and whether people can add events from the wall.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="own-title">
+    <div class="wrap own">
+      <div class="section-head">
+        <span class="eyebrow">Yours, not rented</span>
+        <h2 id="own-title">Your family’s schedule stays in your house.</h2>
+        <p>Hearth runs in Docker on a home server, a Raspberry Pi or a small VPS. There’s no account with us, because there is no “us”.</p>
+      </div>
+      <dl class="facts">
+        <div class="fact"><dt>No subscription</dt><dd>Free to run. The code is on GitHub for anyone to read.</dd></div>
+        <div class="fact"><dt>Accounts for everyone</dt><dd>Each adult gets their own login and decides which calendars to share, and with whom.</dd></div>
+        <div class="fact"><dt>Nightly backups</dt><dd>The database is backed up every night, and a script can copy the backups to your PC.</dd></div>
+        <div class="fact"><dt>Looks after itself</dt><dd>A health page for admins, plus an email or push alert if backups stop, sync breaks or the disk fills up.</dd></div>
+        <div class="fact"><dt>Private by design</dt><dd>Linked-account passwords and tokens are encrypted. Wall displays use revocable links, not passwords.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="install-section" id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Install</span>
+        <h2 id="install-title">Up and running in about five minutes.</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><h3>Run one command</h3><p>On a Linux machine that’s always on, paste the install command below. It sets up Docker, generates the secrets and downloads Hearth.</p></div>
+        <div class="step"><h3>Answer two questions</h3><p>Home network only, your own domain with HTTPS, or a Cloudflare Tunnel? And which time zone is home?</p></div>
+        <div class="step"><h3>Create your account</h3><p>Open the address it prints, for example <code>http://192.168.1.50:8080</code>. The first account becomes the admin.</p></div>
+      </div>
+      <div class="install-wide">
+        <div class="install" role="group" aria-label="Install command">
+          <code><span class="p">$ </span>curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh <span class="d">|</span> sudo bash</code>
+          <button class="copy" type="button" id="copy-install" data-copy="curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh | sudo bash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <div class="reqs">
+          <span>Ubuntu 22.04+ or Debian 12</span>
+          <span>PC, server or Raspberry Pi 4/5</span>
+          <span>1 GB of memory is plenty</span>
+          <span>Run it again to update</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-title">
+    <div class="wrap faq">
+      <div class="section-head">
+        <span class="eyebrow">Questions</span>
+        <h2 id="faq-title">Good to know</h2>
+        <p>Something else? Ask on <a href="https://github.com/JEwaldt27/hearth-calendar/issues">GitHub</a>.</p>
+      </div>
+      <div>
+        <details open>
+          <summary>What do I need for the wall display?</summary>
+          <p>Any screen with a modern web browser. An older iPad or Android tablet works well, and so does a monitor with a Raspberry Pi. The display does very little work, so a secondhand tablet is plenty. Create a display link in Settings and open it on the device.</p>
+        </details>
+        <details>
+          <summary>Do I need a domain name?</summary>
+          <p>No. Hearth works on your home network straight away. For use away from home, installing it as a phone app, push reminders, and linking Google or Outlook, you’ll want HTTPS. The installer can set that up with your own domain or a free Cloudflare Tunnel.</p>
+        </details>
+        <details>
+          <summary>Which calendars can I connect?</summary>
+          <p>Google, Outlook.com and Microsoft 365, iCloud, Fastmail, Nextcloud and any other CalDAV server sync both ways. School, sports and team calendars can be added from their subscribe links, and holiday calendars from a list of countries.</p>
+        </details>
+        <details>
+          <summary>Does my data go anywhere?</summary>
+          <p>Your events, lists and photos stay on your server. Hearth only talks to the services you connect (like Google or Outlook), your own email provider if you set one up, and Open-Meteo for the weather, which only receives your town’s location.</p>
+        </details>
+        <details>
+          <summary>How do updates work?</summary>
+          <p>Run the install command again. It keeps your settings and data, downloads the newest version and restarts. Each update is built automatically from the code on GitHub.</p>
+        </details>
+        <details>
+          <summary>Can the kids use it without accounts?</summary>
+          <p>Yes. Family members are just names with a colour and emoji. Kids can tick off chores and see their stars on the wall display, and grown-ups manage everything from their own accounts.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing" aria-labelledby="closing-title">
+    <div class="wrap">
+      <span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <h2 id="closing-title">Put the whole family on one page.</h2>
+      <div class="hero-actions">
+        <a class="btn primary" href="#install">Install Hearth</a>
+        <a class="btn" href="https://github.com/JEwaldt27/hearth-calendar">View the code on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="brand" style="font-size:17px">Hearth</span>
+    <span class="grow">A self-hosted family calendar.</span>
+    <a href="https://github.com/JEwaldt27/hearth-calendar">GitHub</a>
+    <a href="https://github.com/JEwaldt27/hearth-calendar#readme">Documentation</a>
+    <a href="https://github.com/JEwaldt27/hearth-calendar/issues">Report a problem</a>
+  </div>
+</footer>
+
+<script>
+  for (const button of document.querySelectorAll('.copy')) {
+    button.addEventListener('click', async () => {
+      const label = button.querySelector('span');
+      const text = button.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(text);
+        label.textContent = 'Copied';
+      } catch {
+        // Clipboard blocked: select the command so it can be copied by hand.
+        const code = button.parentElement.querySelector('code');
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        label.textContent = 'Press Ctrl+C';
+      }
+      setTimeout(() => (label.textContent = 'Copy'), 2200);
+    });
+  }
+</script>
+</body>
+</html>

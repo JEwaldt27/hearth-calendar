@@ -417,9 +417,9 @@ function build() {
     els.side = h(
       'aside',
       { class: 'd-chores' },
-      s.showMeals ? [h('h2', {}, '🍽 Meals'), els.mealsBox] : null,
-      s.showChores ? [h('h2', { class: s.showMeals ? 'd-section-gap' : '' }, 'Today’s chores'), els.choreBoard] : null,
-      s.showLists ? [h('h2', { class: s.showChores || s.showMeals ? 'd-section-gap' : '' }, 'Lists'), els.listsBox] : null,
+      s.showMeals ? h('section', { class: 'd-section' }, h('h2', {}, '🍽 Meals'), els.mealsBox) : null,
+      s.showChores ? h('section', { class: 'd-section' }, h('h2', { class: s.showMeals ? 'd-section-gap' : '' }, 'Today’s chores'), els.choreBoard) : null,
+      s.showLists ? h('section', { class: 'd-section' }, h('h2', { class: s.showChores || s.showMeals ? 'd-section-gap' : '' }, 'Lists'), els.listsBox) : null,
     );
     els.chores = s.showChores ? els.side : null;
   }
