@@ -10,7 +10,17 @@ function int(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-const baseUrl = (env.BASE_URL || `http://localhost:${int(env.PORT, 3000)}`).replace(/\/+$/, '');
+// Abbreviations like "EST" are fixed offsets that ignore daylight saving; map them to real regions.
+const ZONE_ALIASES = {
+  EST: 'America/New_York', EDT: 'America/New_York', ET: 'America/New_York',
+  CST: 'America/Chicago', CDT: 'America/Chicago', CT: 'America/Chicago',
+  MST: 'America/Denver', MDT: 'America/Denver', MT: 'America/Denver',
+  PST: 'America/Los_Angeles', PDT: 'America/Los_Angeles', PT: 'America/Los_Angeles',
+  AKST: 'America/Anchorage', AKDT: 'America/Anchorage', HST: 'Pacific/Honolulu',
+};
+const zoneSetting = (env.DEFAULT_TIMEZONE || 'America/Chicago').trim();
+
+const baseUrl =(env.BASE_URL || `http://localhost:${int(env.PORT, 3000)}`).replace(/\/+$/, '');
 
 export const config = {
   port: int(env.PORT, 3000),
@@ -21,7 +31,7 @@ export const config = {
   allowSignup: bool(env.ALLOW_SIGNUP, false),
   cookieSecure: bool(env.COOKIE_SECURE, baseUrl.startsWith('https://')),
   trustProxy: bool(env.TRUST_PROXY, true),
-  defaultTimezone: env.DEFAULT_TIMEZONE || 'America/Chicago',
+  defaultTimezone: ZONE_ALIASES[zoneSetting.toUpperCase()] || zoneSetting,
   syncIntervalMinutes: Math.max(1, int(env.SYNC_INTERVAL_MINUTES, 15)),
   syncPastDays: int(env.SYNC_PAST_DAYS, 365),
   syncFutureDays: int(env.SYNC_FUTURE_DAYS, 3 * 365),

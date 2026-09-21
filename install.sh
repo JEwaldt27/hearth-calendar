@@ -54,6 +54,36 @@ random_hex() {
   if command -v openssl >/dev/null 2>&1; then openssl rand -hex "$1"; else od -An -tx1 -N"$1" /dev/urandom | tr -d ' \n'; fi
 }
 
+# "EST" and friends are fixed offsets with no daylight saving; use the real region instead.
+normalize_zone() {
+  case "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')" in
+    EST | EDT | ET | EASTERN | US/EASTERN) echo "America/New_York" ;;
+    CST | CDT | CT | CENTRAL | US/CENTRAL) echo "America/Chicago" ;;
+    MST | MDT | MT | MOUNTAIN | US/MOUNTAIN) echo "America/Denver" ;;
+    PST | PDT | PT | PACIFIC | US/PACIFIC) echo "America/Los_Angeles" ;;
+    AKST | AKDT | US/ALASKA) echo "America/Anchorage" ;;
+    HST | US/HAWAII) echo "Pacific/Honolulu" ;;
+    UTC | GMT | ETC/UTC) echo "UTC" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+valid_zone() {
+  [ "$1" = "UTC" ] && return 0
+  case "$1" in */*) ;; *) return 1 ;; esac
+  [ ! -d /usr/share/zoneinfo ] || [ -f "/usr/share/zoneinfo/$1" ]
+}
+
+ask_zone() {
+  local default="$1" zone
+  for _ in 1 2 3 4 5; do
+    zone="$(normalize_zone "$(ask "Household time zone, e.g. America/New_York" "$default")")"
+    if valid_zone "$zone"; then printf '%s' "$zone"; return; fi
+    printf 'Unknown time zone "%s". Use a Region/City name like America/Chicago or Europe/London.\n' "$zone" > /dev/tty
+  done
+  printf '%s' "$default"
+}
+
 [ "$(id -u)" -eq 0 ] || fail "Run this as root, for example:  curl -fsSL ${RAW}/install.sh | sudo bash"
 [ "$(uname -s)" = "Linux" ] || fail "Hearth installs on Linux (Ubuntu or Debian)."
 command -v curl >/dev/null 2>&1 || fail "curl is required (apt-get install -y curl)."
@@ -68,6 +98,23 @@ fi
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is missing. Install the docker-compose-plugin package and run this again."
 systemctl enable --now docker >/dev/null 2>&1 || true
 
+# Docker from the snap store is sandboxed and can't read /opt. Keep the files in the snap's own
+# folder instead, with /opt/hearth as a shortcut to it.
+case "$(readlink -f "$(command -v docker)")" in
+  /snap/*)
+    if [ -z "${HEARTH_DIR:-}" ]; then
+      DIR="/var/snap/docker/common/hearth"
+      info "Docker is the snap version, so Hearth lives in $DIR (shortcut: /opt/hearth)"
+      mkdir -p "$DIR"
+      if [ -d /opt/hearth ] && [ ! -L /opt/hearth ]; then
+        # Move anything from an earlier attempt, keeping its settings.
+        cp -a /opt/hearth/. "$DIR/" && rm -rf /opt/hearth
+      fi
+      ln -sfn "$DIR" /opt/hearth
+    fi
+    ;;
+esac
+
 # --- Files -------------------------------------------------------------------------------
 mkdir -p "$DIR/deploy" "$DIR/backups"
 cd "$DIR"
@@ -80,6 +127,12 @@ done
 # --- Settings ----------------------------------------------------------------------------
 if [ -f .env ]; then
   info "Keeping your existing settings in $DIR/.env"
+  current_zone="$(get_env DEFAULT_TIMEZONE)"
+  fixed_zone="$(normalize_zone "$current_zone")"
+  if [ -n "$current_zone" ] && [ "$fixed_zone" != "$current_zone" ]; then
+    set_env DEFAULT_TIMEZONE "$fixed_zone"
+    info "Time zone $current_zone changed to $fixed_zone (so daylight saving is handled)"
+  fi
 else
   info "Creating $DIR/.env"
   cp .env.example .env
@@ -127,11 +180,15 @@ else
   esac
   base="${HEARTH_BASE_URL:-$base}"
   set_env BASE_URL "${base%/}"
-  set_env DEFAULT_TIMEZONE "${HEARTH_TIMEZONE:-$(ask "Household time zone" "$zone")}"
+  if [ -n "${HEARTH_TIMEZONE:-}" ]; then set_env DEFAULT_TIMEZONE "$(normalize_zone "$HEARTH_TIMEZONE")"; else set_env DEFAULT_TIMEZONE "$(ask_zone "$zone")"; fi
 fi
 
 # --- Start -------------------------------------------------------------------------------
 info "Downloading and starting Hearth (this can take a minute the first time)"
+if ! docker compose config -q >/dev/null 2>&1; then
+  docker compose config -q || true
+  fail "Docker Compose can't read $DIR/docker-compose.yml (Docker: $(readlink -f "$(command -v docker)")). Set HEARTH_DIR to a folder Docker can read and run this again."
+fi
 docker compose pull
 docker compose up -d --remove-orphans
 

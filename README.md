@@ -60,6 +60,8 @@ The installer:
 4. asks how people will reach Hearth (home network only, built-in HTTPS with your domain, or a Cloudflare Tunnel) and your time zone;
 5. downloads the Hearth image from GitHub and starts it.
 
+If Docker was installed from the snap store (an option during Ubuntu Server setup), the files go in `/var/snap/docker/common/hearth` instead, because snap Docker can't read `/opt`; `/opt/hearth` is then a shortcut to that folder.
+
 **To update**, run the same command again. It keeps your `.env` and all your data, downloads the newest version, and restarts. To change settings later, edit `/opt/hearth/.env` and run the command again.
 
 For an unattended install, set the answers as environment variables, for example `curl -fsSL …/install.sh | sudo HEARTH_BASE_URL=http://192.168.1.50:8080 HEARTH_TIMEZONE=America/Chicago bash`. The other options (`HEARTH_DIR`, `HEARTH_DOMAIN`, `HEARTH_TUNNEL_TOKEN`, `HEARTH_REF`) are listed at the top of [install.sh](install.sh).
