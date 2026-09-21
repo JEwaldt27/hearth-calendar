@@ -55,14 +55,14 @@ curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/inst
 The installer:
 
 1. installs Docker if it isn't already there;
-2. downloads the Docker Compose setup into `/opt/hearth`;
-3. creates `/opt/hearth/.env` with freshly generated secrets;
+2. downloads the Docker Compose setup into `hearth` in your home folder (for example `/home/you/hearth`);
+3. creates `~/hearth/.env` with freshly generated secrets;
 4. asks how people will reach Hearth (home network only, built-in HTTPS with your domain, or a Cloudflare Tunnel) and your time zone;
 5. downloads the Hearth image from GitHub and starts it.
 
-If Docker was installed from the snap store (an option during Ubuntu Server setup), the files go in `/var/snap/docker/common/hearth` instead, because snap Docker can't read `/opt`; `/opt/hearth` is then a shortcut to that folder.
+The home folder is used because every kind of Docker can read it, including the sandboxed snap version offered during Ubuntu Server setup. If Docker still can't read it, the installer moves everything to `/var/snap/docker/common/hearth` and says so. Set `HEARTH_DIR` to choose another folder.
 
-**To update**, run the same command again. It keeps your `.env` and all your data, downloads the newest version, and restarts. To change settings later, edit `/opt/hearth/.env` and run the command again.
+**To update**, run the same command again. It keeps your `.env` and all your data, downloads the newest version, and restarts. To change settings later, edit `~/hearth/.env` (with `sudo`) and run the command again.
 
 For an unattended install, set the answers as environment variables, for example `curl -fsSL …/install.sh | sudo HEARTH_BASE_URL=http://192.168.1.50:8080 HEARTH_TIMEZONE=America/Chicago bash`. The other options (`HEARTH_DIR`, `HEARTH_DOMAIN`, `HEARTH_TUNNEL_TOKEN`, `HEARTH_REF`) are listed at the top of [install.sh](install.sh).
 
@@ -211,7 +211,7 @@ From the project folder on your PC:
 .\deploy.cmd                             # after that
 ```
 
-The server address is remembered in `deploy.server`, which is not committed to git. It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, builds the image from that code, stamps the git commit as the version (shown in **Settings → Server health**), rebuilds, waits until Hearth reports healthy, and then copies any new nightly backups to your PC. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`, `-RemoteDir /opt/hearth` (if the server was set up with the one-command installer). It warns if you have changes not yet committed to git.
+The server address is remembered in `deploy.server`, which is not committed to git. It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, builds the image from that code, stamps the git commit as the version (shown in **Settings → Server health**), rebuilds, waits until Hearth reports healthy, and then copies any new nightly backups to your PC. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`, `-RemoteDir /home/you/hearth` (if the installer was run by a user other than root). It warns if you have changes not yet committed to git.
 
 To avoid typing the server password several times per deploy (and to let scheduled backup copies run on their own), set up an SSH key once:
 

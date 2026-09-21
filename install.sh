@@ -3,12 +3,12 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh | sudo bash
 #
-# Installs Docker if needed, downloads the Docker Compose setup into /opt/hearth, creates .env with
+# Installs Docker if needed, downloads the Docker Compose setup into ~/hearth, creates .env with
 # fresh secrets, and starts Hearth. Running it again updates an existing install (your .env and
 # data are kept).
 #
 # Optional settings (environment variables, handy for unattended installs):
-#   HEARTH_DIR           install folder                    (default /opt/hearth)
+#   HEARTH_DIR           install folder                    (default ~/hearth of the user running sudo)
 #   HEARTH_REF           git branch or tag to install from (default main)
 #   HEARTH_BASE_URL      address people will open          (asked; default http://<this server>:8080)
 #   HEARTH_TIMEZONE      household time zone               (asked; default this server's zone)
@@ -18,7 +18,7 @@ set -euo pipefail
 
 REPO="JEwaldt27/hearth-calendar"
 REF="${HEARTH_REF:-main}"
-DIR="${HEARTH_DIR:-/opt/hearth}"
+DIR="${HEARTH_DIR:-}"
 RAW="https://raw.githubusercontent.com/${REPO}/${REF}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -98,22 +98,40 @@ fi
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is missing. Install the docker-compose-plugin package and run this again."
 systemctl enable --now docker >/dev/null 2>&1 || true
 
-# Docker from the snap store is sandboxed and can't read /opt. Keep the files in the snap's own
-# folder instead, with /opt/hearth as a shortcut to it.
-case "$(readlink -f "$(command -v docker)")" in
-  /snap/*)
-    if [ -z "${HEARTH_DIR:-}" ]; then
-      DIR="/var/snap/docker/common/hearth"
-      info "Docker is the snap version, so Hearth lives in $DIR (shortcut: /opt/hearth)"
-      mkdir -p "$DIR"
-      if [ -d /opt/hearth ] && [ ! -L /opt/hearth ]; then
-        # Move anything from an earlier attempt, keeping its settings.
-        cp -a /opt/hearth/. "$DIR/" && rm -rf /opt/hearth
-      fi
-      ln -sfn "$DIR" /opt/hearth
-    fi
-    ;;
-esac
+# Snap commands are links to /usr/bin/snap rather than paths under /snap.
+is_snap_docker() {
+  local p
+  p="$(command -v docker)"
+  case "$p" in /snap/*) return 0 ;; esac
+  [ "$(readlink -f "$p")" = "/usr/bin/snap" ]
+}
+
+# Moves the install folder, keeping everything in it. Only used for the default location.
+move_to() {
+  local new="$1"
+  [ "$new" = "$DIR" ] && return 0
+  info "Moving Hearth to $new"
+  mkdir -p "$new"
+  cp -a "$DIR/." "$new/"
+  rm -rf "$DIR"
+  DIR="$new"
+  cd "$DIR"
+}
+
+# Hearth lives in the home folder of whoever ran sudo: every kind of Docker can read home
+# folders, including the sandboxed snap version (which can't read /opt).
+if [ -z "$DIR" ]; then
+  home="$(getent passwd "${SUDO_USER:-root}" | cut -d: -f6 || true)"
+  { [ -n "$home" ] && [ -d "$home" ]; } || home="/root"
+  DIR="$home/hearth"
+  # Earlier versions of this installer used /opt/hearth.
+  if [ ! -f "$DIR/.env" ] && [ -f /opt/hearth/.env ]; then
+    info "Moving your earlier install from /opt/hearth to $DIR"
+    mkdir -p "$DIR"
+    cp -a /opt/hearth/. "$DIR/"
+    rm -rf /opt/hearth
+  fi
+fi
 
 # --- Files -------------------------------------------------------------------------------
 mkdir -p "$DIR/deploy" "$DIR/backups"
@@ -186,8 +204,12 @@ fi
 # --- Start -------------------------------------------------------------------------------
 info "Downloading and starting Hearth (this can take a minute the first time)"
 if ! docker compose config -q >/dev/null 2>&1; then
-  docker compose config -q || true
-  fail "Docker Compose can't read $DIR/docker-compose.yml (Docker: $(readlink -f "$(command -v docker)")). Set HEARTH_DIR to a folder Docker can read and run this again."
+  # Last resort for snap Docker: its own data folder is always readable to it.
+  if [ -z "${HEARTH_DIR:-}" ] && is_snap_docker; then move_to /var/snap/docker/common/hearth; fi
+  if ! docker compose config -q >/dev/null 2>&1; then
+    docker compose config -q || true
+    fail "Docker Compose can't read $DIR/docker-compose.yml (Docker: $(command -v docker)). Set HEARTH_DIR to a folder Docker can read and run this again."
+  fi
 fi
 docker compose pull
 docker compose up -d --remove-orphans
