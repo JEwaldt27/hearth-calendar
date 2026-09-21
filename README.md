@@ -2,6 +2,14 @@
 
 A self-hosted family wall calendar in the style of Skylight. Runs on your own Ubuntu server with Docker. You use it from any web browser, and a tablet or monitor on the wall can run the full-screen display.
 
+**Install on Ubuntu or Debian with one command:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh | sudo bash
+```
+
+See [Install](#install-on-ubuntu) for what it does and other ways to install.
+
 - **Accounts.** Everyone gets their own login. The first account becomes the admin.
 - **Calendars.** Make calendars inside Hearth, subscribe to read-only ICS links, or **link iCloud, Google, Outlook / Microsoft 365, Fastmail, Nextcloud, or any CalDAV account with two-way sync**. Events you add or edit in Hearth are pushed back to that calendar, so they show up on your phone.
 - **Sharing.** Share any calendar or list (chores, groceries, meal plans) with another account as *view* or *edit*. Each person decides which of their calendars appear in their own view and on their wall displays, and can give shared calendars their own colour.
@@ -23,6 +31,7 @@ A self-hosted family wall calendar in the style of Skylight. Runs on your own Ub
 docker compose
 ├── db           postgres:17        data in the "db-data" volume
 ├── app          Node 22 + Express  API + static web app on :3000 (host :8080)
+│                 image: ghcr.io/jewaldt27/hearth-calendar (amd64 + arm64)
 ├── backup       postgres:17        nightly database dumps into ./backups
 ├── caddy        (profile https)    automatic HTTPS on 80/443
 └── cloudflared  (profile tunnel)   Cloudflare Tunnel, no open ports
@@ -35,7 +44,27 @@ docker compose
 
 ## Install on Ubuntu
 
-Tested layout for Ubuntu 22.04/24.04. You need a user with `sudo`.
+Works on Ubuntu 22.04/24.04 and Debian 12, on regular PCs and servers (amd64) or a Raspberry Pi 4/5 (arm64, 64-bit OS).
+
+### Quick install (one command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JEwaldt27/hearth-calendar/main/install.sh | sudo bash
+```
+
+The installer:
+
+1. installs Docker if it isn't already there;
+2. downloads the Docker Compose setup into `/opt/hearth`;
+3. creates `/opt/hearth/.env` with freshly generated secrets;
+4. asks how people will reach Hearth (home network only, built-in HTTPS with your domain, or a Cloudflare Tunnel) and your time zone;
+5. downloads the Hearth image from GitHub and starts it.
+
+**To update**, run the same command again. It keeps your `.env` and all your data, downloads the newest version, and restarts. To change settings later, edit `/opt/hearth/.env` and run the command again.
+
+For an unattended install, set the answers as environment variables, for example `curl -fsSL …/install.sh | sudo HEARTH_BASE_URL=http://192.168.1.50:8080 HEARTH_TIMEZONE=America/Chicago bash`. The other options (`HEARTH_DIR`, `HEARTH_DOMAIN`, `HEARTH_TUNNEL_TOKEN`, `HEARTH_REF`) are listed at the top of [install.sh](install.sh).
+
+### Manual install
 
 **1. Install Docker**
 
@@ -45,7 +74,7 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER   # log out and back in afterwards
 ```
 
-**2. Copy the project to the server** (for example `scp -r "Shared Calendar" you@server:~/hearth`, or clone your git repo), then:
+**2. Get the files** by cloning this repository (`git clone https://github.com/JEwaldt27/hearth-calendar.git ~/hearth`), then:
 
 ```bash
 cd ~/hearth
@@ -58,9 +87,11 @@ nano .env    # set BASE_URL and DEFAULT_TIMEZONE
 **3. Start it**
 
 ```bash
-docker compose up -d --build
+docker compose up -d           # downloads the published image
 docker compose logs -f app     # wait for "Hearth Calendar listening"
 ```
+
+To build the image from your copy of the code instead (for example after changing it), use `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 Open `BASE_URL` (for example `http://192.168.1.50:8080`) and create the first account. That account is the administrator.
 
@@ -80,7 +111,7 @@ docker compose --profile https up -d
 
 Caddy gets and renews certificates automatically. If you already run nginx or Traefik, leave the profile off and proxy to `127.0.0.1:8080`.
 
-**Alternative: Cloudflare Tunnel** (no open ports; needs a domain on Cloudflare). In the Cloudflare Zero Trust dashboard, create a tunnel (Networks → Tunnels → Create → Cloudflared), copy its token, and add a public hostname such as `calendar.example.com` with service `HTTP` → `app:3000`. Then set `BASE_URL=https://calendar.example.com`, `APP_BIND=127.0.0.1` and `CLOUDFLARE_TUNNEL_TOKEN=<token>` in `.env` and run `docker compose --profile tunnel up -d`. Don't use Caddy at the same time.
+**Alternative: Cloudflare Tunnel** (no open ports; needs a domain on Cloudflare). In the Cloudflare Zero Trust dashboard, create a tunnel (Networks → Tunnels → Create → Cloudflared), copy its token, and add a public hostname such as `calendar.example.com` with service `HTTP` → `app:3000`. Then set `BASE_URL=https://calendar.example.com`, `APP_BIND=127.0.0.1` and `CLOUDFLARE_TUNNEL_TOKEN=<token>` in `.env` and run `docker compose --profile tunnel up -d`. Adding `COMPOSE_PROFILES=tunnel` (or `https`) to `.env` makes plain `docker compose up -d` include it automatically. Don't use Caddy at the same time.
 
 ### Adding people
 
@@ -174,10 +205,11 @@ Kiosk tips: on an iPad use *Add to Home Screen* and Guided Access. On Android us
 From the project folder on your PC:
 
 ```powershell
-.\deploy.cmd
+.\deploy.cmd -Server root@YOUR-SERVER-IP   # the first time
+.\deploy.cmd                             # after that
 ```
 
-It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, stamps the git commit as the version (shown in **Settings → Server health**), rebuilds, waits until Hearth reports healthy, and then copies any new nightly backups to your PC. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`. It warns if you have changes not yet committed to git.
+The server address is remembered in `deploy.server`, which is not committed to git. It backs up the database (keeping the last five in `~/hearth-deploy-backups`), copies the project to the server, builds the image from that code, stamps the git commit as the version (shown in **Settings → Server health**), rebuilds, waits until Hearth reports healthy, and then copies any new nightly backups to your PC. Options: `-SkipBackup`, `-Server root@1.2.3.4`, `-ComposeProfile https`, `-RemoteDir /opt/hearth` (if the server was set up with the one-command installer). It warns if you have changes not yet committed to git.
 
 To avoid typing the server password several times per deploy (and to let scheduled backup copies run on their own), set up an SSH key once:
 
@@ -191,8 +223,8 @@ The project is a git repository, so `git log` shows what changed and when, and a
 ### On the server
 
 ```bash
-# Update after copying new code (add --profile tunnel / https as you use them)
-docker compose up -d --build
+# Update to the newest published version (add --profile tunnel / https unless COMPOSE_PROFILES is set in .env)
+docker compose pull && docker compose up -d
 
 # Logs / sync errors
 docker compose logs -f app
@@ -225,10 +257,16 @@ Keep a copy of `.env` with your backups: `APP_SECRET` is required to decrypt sav
 
 **Settings → Server health** (admins) shows the running version, uptime, the latest backup, free disk space, database size, linked calendars that aren't syncing, and recent problems. Hearth checks every 15 minutes and emails and pushes the admins, at most once a day per problem, if backups stop, a linked calendar keeps failing for two hours, the disk gets nearly full, or the server restarted unexpectedly. Turn alerts off or send a test from the same page.
 
+### Releases
+
+Every push to `main` publishes `ghcr.io/jewaldt27/hearth-calendar:latest` (plus a tag for the commit) through GitHub Actions. Tagging a commit `v1.2.3` also publishes `1.2.3` and `1.2`. Set `HEARTH_VERSION=1.2.3` in `.env` to stay on a release instead of following `latest`.
+
 ## Configuration reference
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `HEARTH_VERSION` | `latest` | Image tag to run |
+| `COMPOSE_PROFILES` | empty | Add-ons started by plain `docker compose up -d`: `https`, `tunnel` |
 | `APP_SECRET` | required | Session and credential encryption key (32+ chars) |
 | `POSTGRES_PASSWORD` | required | Database password (use hex; it is placed in a URL) |
 | `BASE_URL` | `http://localhost:8080` | Public URL; sets secure cookies, links in emails, and the Google/Outlook redirects |

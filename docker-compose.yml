@@ -17,7 +17,9 @@ services:
       retries: 20
 
   app:
-    build: ./app
+    # Published by GitHub Actions. To build from this folder instead, add
+    # -f docker-compose.build.yml (deploy.cmd does this).
+    image: ghcr.io/jewaldt27/hearth-calendar:${HEARTH_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       db:

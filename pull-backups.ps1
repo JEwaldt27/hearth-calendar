@@ -15,7 +15,7 @@
   .\pull-backups.cmd -Unschedule
 #>
 param(
-  [string]$Server = 'root@YOUR-SERVER-IP',
+  [string]$Server = '',
   [string]$RemoteDir = '~/hearth',
   [string]$Destination = (Join-Path $PSScriptRoot 'backups'),
   [int]$Keep = 30,
@@ -31,6 +31,12 @@ if ($Unschedule) {
   Write-Host "Removed the daily '$taskName' task." -ForegroundColor Green
   return
 }
+
+# The server address lives in deploy.server (not committed to git). -Server sets and remembers it.
+$serverFile = Join-Path $PSScriptRoot 'deploy.server'
+if (-not $Server -and (Test-Path $serverFile)) { $Server = (Get-Content $serverFile -Raw).Trim() }
+if (-not $Server) { throw 'Which server? Run once with -Server root@YOUR-SERVER-IP; it is remembered in deploy.server.' }
+Set-Content -Path $serverFile -Value $Server -NoNewline -Encoding ascii
 
 if ($Schedule) {
   $script = Join-Path $PSScriptRoot 'pull-backups.ps1'

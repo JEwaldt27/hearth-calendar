@@ -4,14 +4,16 @@
   then copies new nightly backups to this PC.
 
 .EXAMPLE
+  .\deploy.cmd -Server root@YOUR-SERVER-IP    (first time; remembered in deploy.server)
+.EXAMPLE
   .\deploy.cmd
 .EXAMPLE
   .\deploy.cmd -SkipBackup
 .EXAMPLE
-  .\deploy.cmd -Server root@192.168.1.50 -ComposeProfile https
+  .\deploy.cmd -ComposeProfile https
 #>
 param(
-  [string]$Server = 'root@YOUR-SERVER-IP',
+  [string]$Server = '',
   [string]$RemoteDir = '~/hearth',
   [string]$ComposeProfile = 'tunnel',
   [switch]$SkipBackup
@@ -19,6 +21,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+
+# The server address lives in deploy.server (not committed to git). -Server sets and remembers it.
+$serverFile = Join-Path $PSScriptRoot 'deploy.server'
+if (-not $Server -and (Test-Path $serverFile)) { $Server = (Get-Content $serverFile -Raw).Trim() }
+if (-not $Server) { throw 'Which server? Run once with -Server root@YOUR-SERVER-IP; it is remembered in deploy.server.' }
+Set-Content -Path $serverFile -Value $Server -NoNewline -Encoding ascii
 
 function Step([string]$message) {
   Write-Host ''
@@ -47,7 +55,7 @@ Write-Host "Deploying Hearth ($commit) to $Server" -ForegroundColor Green
 Step 'Packing files'
 $archive = Join-Path $env:TEMP 'hearth-deploy.tar.gz'
 if (Test-Path $archive) { Remove-Item $archive -Force }
-Invoke-Native 'tar' @('-czf', $archive, '--exclude=node_modules', '--exclude=.git', '--exclude=backups', '--exclude=.env', '-C', $root, '.')
+Invoke-Native 'tar' @('-czf', $archive, '--exclude=node_modules', '--exclude=.git', '--exclude=backups', '--exclude=.env', '--exclude=deploy.server', '--exclude=.github', '-C', $root, '.')
 '{0:N0} KB' -f ((Get-Item $archive).Length / 1KB) | Write-Host
 
 # --- Copy ----------------------------------------------------------------------------
@@ -71,7 +79,8 @@ $steps = @(
   'echo {COMMIT} > DEPLOYED',
   'echo {COMMIT} > app/VERSION',
   'mkdir -p backups',
-  'docker compose --profile {PROFILE} up -d --build',
+  # Build from the copied source rather than pulling the published image.
+  'docker compose -f docker-compose.yml -f docker-compose.build.yml --profile {PROFILE} up -d --build',
   'echo Waiting for Hearth to start...',
   'ok=0; for i in $(seq 1 45); do if docker compose exec -T app wget -qO- http://127.0.0.1:3000/healthz >/dev/null 2>&1; then ok=1; break; fi; sleep 2; done',
   'docker compose --profile {PROFILE} ps',
