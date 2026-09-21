@@ -3,6 +3,7 @@ import { setSyncTrigger, upsertObject } from '../calendar/store.js';
 import { config } from '../config.js';
 import { many, one, query, transaction } from '../db.js';
 import { recordProblem } from '../lib/health.js';
+import { fetchMicrosoftResources } from './microsoft.js';
 import { fetchChangedResources, fetchFeed, remoteCtag } from './remote.js';
 
 const running = new Map();
@@ -62,11 +63,36 @@ async function syncDav(calendar, force) {
   });
 }
 
+// Generated resources differ only in these stamps when nothing really changed.
+const stable = (ics) => ics.replace(/^(DTSTAMP|LAST-MODIFIED|CREATED|SEQUENCE)[:;].*\r?\n/gm, '');
+
+async function syncMicrosoft(calendar) {
+  const resources = await fetchMicrosoftResources(calendar);
+  const existing = await many('SELECT id, href, etag, ics FROM calendar_objects WHERE calendar_id = $1', [calendar.id]);
+  const byHref = new Map(existing.map((o) => [o.href, o]));
+  await transaction(async (client) => {
+    const seen = new Set();
+    for (const r of resources) {
+      seen.add(r.href);
+      const prior = byHref.get(r.href);
+      const ics = r.vcal.toString();
+      if (prior && stable(prior.ics) === stable(ics)) {
+        if (prior.etag !== r.etag) await client.query('UPDATE calendar_objects SET etag = $1 WHERE id = $2', [r.etag, prior.id]);
+        continue;
+      }
+      await upsertObject(client, calendar.id, { id: prior?.id, uid: r.uid, href: r.href, etag: r.etag, ics, vcal: r.vcal });
+    }
+    const gone = existing.filter((o) => !seen.has(o.href)).map((o) => o.id);
+    if (gone.length) await client.query('DELETE FROM calendar_objects WHERE id = ANY($1)', [gone]);
+  });
+}
+
 async function runSync(calendarId, force) {
   const calendar = await one('SELECT * FROM calendars WHERE id = $1', [calendarId]);
   if (!calendar || calendar.source === 'local') return null;
   try {
     if (calendar.source === 'ics') await syncFeed(calendar);
+    else if (calendar.source === 'microsoft') await syncMicrosoft(calendar);
     else await syncDav(calendar, force);
     await query('UPDATE calendars SET last_synced_at = now(), sync_error = NULL, sync_failing_since = NULL WHERE id = $1', [calendarId]);
     return null;

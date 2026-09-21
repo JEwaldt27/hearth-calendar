@@ -6,6 +6,7 @@ import { accessibleCalendars, assertUuid, atLeast, calendarAccess, cleanColor, c
 import { requireAuth, requireUser } from '../lib/auth.js';
 import { assertSafeUrl, decrypt, encrypt, httpError, randomToken } from '../lib/security.js';
 import { authorizationUrl, exchangeCode, GOOGLE_CALDAV_ROOT, listGoogleCalendars, saveGoogleAccount } from '../sync/google.js';
+import * as microsoft from '../sync/microsoft.js';
 import { discoverCaldav, fetchFeed } from '../sync/remote.js';
 import { syncCalendar } from '../sync/sync.js';
 import { mountShares, sharesFor } from './shares.js';
@@ -70,12 +71,13 @@ router.post('/calendars', requireUser, async (req, res) => {
   if (source === 'ics') {
     remoteUrl = cleanText(req.body.url, 2000);
     await fetchFeed(remoteUrl); // fail fast with a helpful message
-  } else if (source === 'caldav' || source === 'google') {
+  } else if (source === 'caldav' || source === 'google' || source === 'microsoft') {
     accountId = assertUuid(req.body.accountId, 'account');
     const account = await one('SELECT * FROM accounts WHERE id = $1 AND user_id = $2', [accountId, req.user.id]);
     if (!account || account.provider !== source) throw httpError(400, 'Unknown linked account.');
     remoteUrl = cleanText(req.body.remoteUrl, 2000);
     if (source === 'google' && !remoteUrl.startsWith(GOOGLE_CALDAV_ROOT)) throw httpError(400, 'Invalid Google calendar.');
+    if (source === 'microsoft' && !microsoft.isMicrosoftCalendarUrl(remoteUrl)) throw httpError(400, 'Invalid Outlook calendar.');
     if (source === 'caldav') await assertSafeUrl(remoteUrl);
   } else if (source !== 'local') {
     throw httpError(400, 'Unknown calendar type.');
@@ -148,7 +150,7 @@ function accountDto(a) {
 
 router.get('/accounts', requireUser, async (req, res) => {
   const rows = await many('SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at', [req.user.id]);
-  res.json({ accounts: rows.map(accountDto), googleEnabled: config.google.enabled });
+  res.json({ accounts: rows.map(accountDto), googleEnabled: config.google.enabled, microsoftEnabled: config.microsoft.enabled });
 });
 
 router.post('/accounts/caldav', requireUser, async (req, res) => {
@@ -177,7 +179,9 @@ router.get('/accounts/:id/calendars', requireUser, async (req, res) => {
   const calendars =
     account.provider === 'google'
       ? await listGoogleCalendars(account)
-      : await discoverCaldav({ serverUrl: account.server_url, username: account.username, password: decrypt(account.secret_enc) });
+      : account.provider === 'microsoft'
+        ? await microsoft.listMicrosoftCalendars(account)
+        : await discoverCaldav({ serverUrl: account.server_url, username: account.username, password: decrypt(account.secret_enc) });
   res.json({ account: accountDto(account), calendars: await markLinked(account.id, calendars) });
 });
 
@@ -211,6 +215,33 @@ router.get('/google/callback', requireUser, async (req, res) => {
   try {
     const result = await exchangeCode(String(req.query.code));
     const accountId = await saveGoogleAccount(req.user.id, result);
+    res.redirect(`/#settings?account=${accountId}`);
+  } catch (err) {
+    res.redirect('/#settings?error=' + encodeURIComponent(err.message));
+  }
+});
+
+// --- Microsoft (Outlook) OAuth ----------------------------------------------
+
+router.get('/microsoft/start', requireUser, (req, res) => {
+  if (!config.microsoft.enabled) throw httpError(400, 'Outlook is not configured on this server. See the README (MS_CLIENT_ID).');
+  const state = randomToken(24);
+  oauthStates.set(state, { userId: req.user.id, expires: Date.now() + 10 * 60 * 1000 });
+  res.redirect(microsoft.authorizationUrl(state));
+});
+
+router.get('/microsoft/callback', requireUser, async (req, res) => {
+  const pending = oauthStates.get(String(req.query.state || ''));
+  oauthStates.delete(String(req.query.state || ''));
+  if (!pending || pending.expires < Date.now() || pending.userId !== req.user.id) {
+    return res.redirect('/#settings?error=' + encodeURIComponent('Microsoft sign-in expired. Please try again.'));
+  }
+  if (req.query.error || !req.query.code) {
+    return res.redirect('/#settings?error=' + encodeURIComponent(String(req.query.error_description || 'Microsoft access was not granted.').slice(0, 300)));
+  }
+  try {
+    const result = await microsoft.exchangeCode(String(req.query.code));
+    const accountId = await microsoft.saveMicrosoftAccount(req.user.id, result);
     res.redirect(`/#settings?account=${accountId}`);
   } catch (err) {
     res.redirect('/#settings?error=' + encodeURIComponent(err.message));

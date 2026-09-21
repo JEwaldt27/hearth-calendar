@@ -21,7 +21,7 @@ import {
 import { buildRule, floating, occurrenceStarts } from './recurrence.js';
 
 const DAY = 86400000;
-export const WRITABLE_SOURCES = new Set(['local', 'caldav', 'google']);
+export const WRITABLE_SOURCES = new Set(['local', 'caldav', 'google', 'microsoft']);
 
 /** Replaces the index rows for one object inside an open transaction. */
 export async function indexObject(client, calendarId, objectId, vcal) {
@@ -243,7 +243,7 @@ function assertWritable(calendar) {
     throw httpError(400, 'Birthdays are added and changed in Settings → Family members.');
   }
   if (!WRITABLE_SOURCES.has(calendar.source)) {
-    throw httpError(400, 'Subscribed ICS feeds are read-only. Link the calendar with CalDAV or Google to edit it here.');
+    throw httpError(400, 'Subscribed ICS feeds are read-only. Link the account (CalDAV, Google or Outlook) to edit it here.');
   }
 }
 

@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { one } from '../db.js';
 import { assertSafeUrl, decrypt, httpError } from '../lib/security.js';
 import { accessToken } from './google.js';
+import { deleteMicrosoftEvent, putMicrosoftEvent } from './microsoft.js';
 
 const TIMEOUT = 30000;
 
@@ -66,6 +67,7 @@ function etagOf(res) {
 
 /** PUT a resource. Returns { href, etag }. */
 export async function putResource(calendar, { href, etag, uid, ics }) {
+  if (calendar.source === 'microsoft') return putMicrosoftEvent(calendar, { href, etag, ics });
   const account = await loadAccount(calendar.account_id);
   const headers = { ...(await authHeaders(account)), 'content-type': 'text/calendar; charset=utf-8' };
   if (href) {
@@ -81,6 +83,7 @@ export async function putResource(calendar, { href, etag, uid, ics }) {
 
 export async function deleteResource(calendar, { href, etag }) {
   if (!href) return;
+  if (calendar.source === 'microsoft') return deleteMicrosoftEvent(calendar, { href, etag });
   const account = await loadAccount(calendar.account_id);
   const headers = await authHeaders(account);
   if (etag) headers['if-match'] = etag;

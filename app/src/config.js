@@ -50,6 +50,18 @@ export const config = {
     },
     redirectUri: `${baseUrl}/api/google/callback`,
   },
+  // Outlook.com / Microsoft 365 via Microsoft Graph. The URL overrides exist for testing.
+  microsoft: {
+    clientId: env.MS_CLIENT_ID || '',
+    clientSecret: env.MS_CLIENT_SECRET || '',
+    tenant: env.MS_TENANT || 'common',
+    loginBase: (env.MS_LOGIN_URL || 'https://login.microsoftonline.com').replace(/\/+$/, ''),
+    graphBase: (env.MS_GRAPH_URL || 'https://graph.microsoft.com/v1.0').replace(/\/+$/, ''),
+    get enabled() {
+      return Boolean(this.clientId && this.clientSecret);
+    },
+    redirectUri: `${baseUrl}/api/microsoft/callback`,
+  },
 };
 
 if (!config.appSecret || config.appSecret.length < 32) {

@@ -31,7 +31,7 @@ const SECTIONS = [
 
 const ADMIN_SECTIONS = new Set(['household', 'users', 'email', 'health']);
 
-const SOURCE_LABEL = { local: 'Hearth', ics: 'ICS subscription', caldav: 'CalDAV', google: 'Google' };
+const SOURCE_LABEL = { local: 'Hearth', ics: 'ICS subscription', caldav: 'CalDAV', google: 'Google', microsoft: 'Outlook' };
 
 const CALDAV_PRESETS = [
   { id: 'icloud', name: 'iCloud (Apple)', url: 'https://caldav.icloud.com/', help: 'Use your Apple ID email and an app-specific password from account.apple.com → Sign-In and Security.' },
@@ -364,7 +364,7 @@ function calendars(panel, app) {
             'div',
             { class: 'row gap-s wrap' },
             h('span', { class: 'badge' }, cal.managed === 'birthdays' ? 'Automatic · from Family members' : SOURCE_LABEL[cal.source]),
-            cal.source === 'caldav' || cal.source === 'google' ? h('span', { class: 'badge accent' }, 'Two-way') : null,
+            ['caldav', 'google', 'microsoft'].includes(cal.source) ? h('span', { class: 'badge accent' }, 'Two-way') : null,
             cal.isOwner ? null : h('span', { class: 'badge' }, `Shared by ${cal.ownerName} · ${cal.permission === 'edit' ? 'can edit' : 'view only'}`),
             member ? h('span', { class: 'badge' }, member.name) : null,
             cal.isOwner && cal.shares?.length ? h('span', { class: 'badge' }, `Shared with ${cal.shares.length}`) : null,
@@ -413,7 +413,7 @@ function calendars(panel, app) {
   add(panel,
     heading(
       'Calendars',
-      'Create calendars here, subscribe to links, or link iCloud / Google / CalDAV accounts so changes made here are pushed back.',
+      'Create calendars here, subscribe to links, or link iCloud / Google / Outlook / CalDAV accounts so changes made here are pushed back.',
       h('button', { class: 'btn primary', onclick: () => calendarForm(app, null, { source: 'local' }) }, '+ New calendar'),
       h('button', { class: 'btn', onclick: () => calendarForm(app, null, { source: 'ics' }) }, '+ Subscribe to link'),
       h('button', { class: 'btn', onclick: () => holidayDialog(app) }, '+ Holidays'),
@@ -522,7 +522,7 @@ async function pickRemoteCalendars(app, account, calendarsList) {
               'div',
               { class: 'list-row' },
               h('span', { class: 'swatch', style: { background: c.color || '#8d7b6a' } }),
-              h('div', { class: 'grow' }, h('strong', {}, c.name), c.readOnly ? h('small', { class: 'muted' }, ' · read-only in Google') : null),
+              h('div', { class: 'grow' }, h('strong', {}, c.name), c.readOnly ? h('small', { class: 'muted' }, ` · read-only in ${SOURCE_LABEL[account.provider] || 'this account'}`) : null),
               c.linked
                 ? h('span', { class: 'badge accent' }, 'Added')
                 : h(
@@ -598,7 +598,7 @@ function caldavDialog(app) {
 
 async function accounts(panel, app, params) {
   add(panel, h('p', { class: 'muted' }, 'Loading…'));
-  const { accounts: list, googleEnabled } = await get('/accounts');
+  const { accounts: list, googleEnabled, microsoftEnabled } = await get('/accounts');
   clear(panel);
   add(panel,
     heading(
@@ -608,6 +608,9 @@ async function accounts(panel, app, params) {
       googleEnabled
         ? h('a', { class: 'btn', href: '/api/google/start' }, '+ Google')
         : h('button', { class: 'btn', onclick: () => toast('Google sign-in is not configured on this server. See the README (GOOGLE_CLIENT_ID).', 'error') }, '+ Google'),
+      microsoftEnabled
+        ? h('a', { class: 'btn', href: '/api/microsoft/start' }, '+ Outlook')
+        : h('button', { class: 'btn', onclick: () => toast('Outlook sign-in is not configured on this server. See the README (MS_CLIENT_ID).', 'error') }, '+ Outlook'),
     ),
     h(
       'div',
@@ -617,7 +620,7 @@ async function accounts(panel, app, params) {
             h(
               'div',
               { class: 'list-row' },
-              h('span', { class: 'badge' }, a.provider === 'google' ? 'Google' : 'CalDAV'),
+              h('span', { class: 'badge' }, SOURCE_LABEL[a.provider] || 'CalDAV'),
               h('div', { class: 'grow' }, h('strong', {}, a.label), a.serverUrl ? h('small', { class: 'muted' }, a.serverUrl) : null),
               h('button', { class: 'btn ghost', onclick: () => pickRemoteCalendars(app, a) }, 'Choose calendars'),
               h(
@@ -644,7 +647,8 @@ async function accounts(panel, app, params) {
       h('ul', { class: 'bullets' },
         h('li', {}, h('strong', {}, 'iCloud, Fastmail, Nextcloud, Yahoo: '), 'link with CalDAV and an app-specific password.'),
         h('li', {}, h('strong', {}, 'Google: '), 'link with Google sign-in (your admin must set up a Google Cloud OAuth client once).'),
-        h('li', {}, h('strong', {}, 'Outlook / Microsoft 365, school & sports sites: '), 'use Calendars → Subscribe to link. These are read-only.'),
+        h('li', {}, h('strong', {}, 'Outlook.com / Microsoft 365: '), 'link with Microsoft sign-in (your admin must register an app in Microsoft Entra once).'),
+        h('li', {}, h('strong', {}, 'School & sports sites: '), 'use Calendars → Subscribe to link. These are read-only.'),
       ),
     ),
   );

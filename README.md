@@ -3,16 +3,19 @@
 A self-hosted family wall calendar in the style of Skylight. Runs on your own Ubuntu server with Docker. You use it from any web browser, and a tablet or monitor on the wall can run the full-screen display.
 
 - **Accounts.** Everyone gets their own login. The first account becomes the admin.
-- **Calendars.** Make calendars inside Hearth, subscribe to read-only ICS links, or **link iCloud, Google, Fastmail, Nextcloud, or any CalDAV account with two-way sync**. Events you add or edit in Hearth are pushed back to that calendar, so they show up on your phone.
+- **Calendars.** Make calendars inside Hearth, subscribe to read-only ICS links, or **link iCloud, Google, Outlook / Microsoft 365, Fastmail, Nextcloud, or any CalDAV account with two-way sync**. Events you add or edit in Hearth are pushed back to that calendar, so they show up on your phone.
 - **Sharing.** Share any calendar or chore list with another account as *view* or *edit*. Each person decides which of their calendars appear in their own view and on their wall displays, and can give shared calendars their own colour.
 - **Family members.** Profiles with a colour and emoji (kids don't need accounts). Calendars and chores belong to a person, and you can filter by person.
-- **Recurring events.** Daily, weekly (chosen days), monthly, and yearly, with an end date or a repeat count. You can edit or delete *one occurrence* or *the whole series*. Times stay correct across daylight saving changes.
-- **Chores and to-dos.** A chore chart with one column per person. Chores can repeat daily, on weekdays, or on chosen days, and reset each day. One-off tasks can have due dates.
-- **Grocery and to-do lists.** Shared checklists on the **Lists** tab: quick add (paste several lines at once), tap to check off, and "Clear checked". Adding something that's already on the list reuses it, and lists refresh every 15 seconds so two people can shop together.
+- **Recurring events.** Daily, weekly (chosen days), monthly, and yearly, with an end date or a repeat count. You can edit or delete *one occurrence*, *this and following*, or *the whole series*. Times stay correct across daylight saving changes.
+- **Calendar tools.** Day, week, month and schedule views; search (🔍); a quick-add bar that understands "Soccer Tuesday 5pm" or "Dentist 9/30 at 3:15"; drag an event to another day or time; countdowns ("12 days until Disney") pinned above the calendar; automatic birthdays from family profiles (with ages); and public holiday calendars.
+- **Chores and to-dos.** A chore chart with one column per person. Chores can repeat daily, on weekdays, or on chosen days, and reset each day. One-off tasks can have due dates. Chores can be worth ⭐ stars that kids save up and spend on rewards you set.
+- **Grocery and to-do lists.** Shared checklists on the **Lists** tab: quick add (paste several lines at once), tap to check off, and "Clear checked". Adding something that's already on the list reuses it, and lists refresh every 15 seconds so two people can shop together. **Usuals** re-add your regular items in one tap, and each item shows who added and checked it.
+- **Meal planner.** Plan breakfast, lunch, dinner and snacks by week on the **Meals** tab, reuse past meals, and send ingredients to a grocery list.
 - **Phone app.** Install Hearth to your home screen (Android, iPhone, or desktop Chrome/Edge) for its own icon, full-screen window and bottom tab bar. The app shell opens even without a connection; your calendar data is never cached on the device.
 - **Reminders.** Push notifications on phones and computers before events, for all-day events in the morning, and for chores still open in the evening.
 - **Phone calendar links.** A private, read-only subscribe link per calendar (or all of them) for the iPhone, Google or Outlook calendar apps.
-- **Wall display mode.** Big clock, week/month/schedule views, a chore panel and grocery lists you can tap to check off, filter chips for each person, and optional adding and editing. The screen stays awake, returns to today when left idle, and signs in with a revocable link instead of a password.
+- **Wall display mode.** Big clock, week/month/schedule views, a chore panel and grocery lists you can tap to check off, filter chips for each person, and optional adding and editing. The screen stays awake, returns to today when left idle, and signs in with a revocable link instead of a password. Optional extras: weather, an "up next" card, meals, stars, countdowns, night mode (dims on a schedule), a photo frame when idle, and a portrait layout for a tablet on its side.
+- **Looking after itself.** An admin health page (backups, disk space, sync problems, version), email/push alerts when something breaks, and a script that copies the nightly backups to your PC.
 
 ## Architecture
 
@@ -126,7 +129,9 @@ HTTPS is required (your Cloudflare Tunnel or Caddy setup provides it).
 | iCloud | Settings → Linked accounts → **+ iCloud / CalDAV**. Use your Apple ID email and an **app-specific password** from account.apple.com → Sign-In and Security. | Two-way |
 | Fastmail / Nextcloud / Yahoo / other CalDAV | Same dialog, then choose the preset (use an app password). | Two-way |
 | Google | Settings → Linked accounts → **+ Google** (needs the one-time setup below). | Two-way |
-| Outlook / Microsoft 365, school & team sites | Settings → Calendars → **Subscribe to link**, and paste the ICS/webcal URL. | Read-only |
+| Outlook.com / Microsoft 365 | Settings → Linked accounts → **+ Outlook** (needs the one-time setup below). | Two-way |
+| School & team sites | Settings → Calendars → **Subscribe to link**, and paste the ICS/webcal URL. | Read-only |
+| Public holidays | Settings → Calendars → **Holidays**, pick a country. | Read-only |
 
 After linking an account, choose which of its calendars to add. Anyone you share a linked calendar with (with *edit*) also writes to it using your saved credentials.
 
@@ -138,11 +143,24 @@ After linking an account, choose which of its calendars to add. Anyone you share
 4. **Credentials → Create credentials → OAuth client ID → Web application**. Add the authorised redirect URI `https://YOUR-DOMAIN/api/google/callback` (it must exactly match `BASE_URL` + `/api/google/callback`). Google requires HTTPS here unless you use `http://localhost`.
 5. Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then run `docker compose up -d`.
 
+### Linking Outlook / Microsoft 365 (one-time admin setup)
+
+1. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com/) (or portal.azure.com) with any Microsoft account. Go to **App registrations → New registration**.
+2. Name it *Hearth*. Under **Supported account types** choose **Accounts in any organizational directory and personal Microsoft accounts**. Under **Redirect URI** choose **Web** and enter `https://YOUR-DOMAIN/api/microsoft/callback` (it must exactly match `BASE_URL` + `/api/microsoft/callback`).
+3. On the app's **Overview** page, copy the **Application (client) ID**.
+4. **Certificates & secrets → New client secret.** Copy the secret's **Value** (not its ID) straight away; it's only shown once. Secrets expire (24 months at most), so put a reminder in your calendar to make a new one.
+5. **API permissions:** make sure Microsoft Graph *delegated* permissions **offline_access**, **User.Read** and **Calendars.ReadWrite** are listed (add the missing ones with **Add a permission → Microsoft Graph → Delegated**). Personal Outlook.com accounts need no admin consent; a work or school account may need its IT admin to approve the app.
+6. Put the values in `.env` as `MS_CLIENT_ID` and `MS_CLIENT_SECRET`, then deploy (`.\deploy.cmd`) or run `docker compose up -d`.
+
+Outlook repeat patterns (daily, weekly, monthly, yearly, "second Tuesday") come across as proper series, including changed and deleted occurrences. The rare pattern Hearth can't repeat itself shows as separate events. Hearth's countdown flag is stored on the Outlook event, so it survives syncs.
+
 ## Setting up a wall display
 
-1. **Settings → Wall displays → + New display.** Pick the default view, theme, week start, whether today's chores and grocery/to-do lists show, and whether adding things from the display is allowed.
+1. **Settings → Wall displays → + New display.** Pick the default view (day, week, month or schedule), theme, week start, the panels to show (chores, lists, meals, weather, up next, countdowns), night mode hours, the photo frame, and whether adding things from the display is allowed.
 2. Open the link it shows on the tablet or wall computer. The device remembers it, and you can revoke it or issue a new link any time.
 3. Choose what appears using the **Show on my wall displays** switches on each calendar and chore list.
+
+Weather needs the household location in **Settings → Household** (admin; uses Open-Meteo, no key needed). Photo frame pictures are uploaded in **Settings → Photos**. Turn the tablet sideways and the display switches to its portrait layout automatically.
 
 Kiosk tips: on an iPad use *Add to Home Screen* and Guided Access. On Android use a kiosk browser such as Fully Kiosk. On a Raspberry Pi run `chromium --kiosk https://your-server/display`.
 
@@ -196,7 +214,13 @@ gunzip -c backups/hearth-2026-09-18_0300.sql.gz | docker compose exec -T db psql
 docker compose start app
 ```
 
-`./backups` is on the same server, so copy it somewhere else now and then (for example `scp -r you@server:~/hearth/backups .`). Keep a copy of `.env` with it: `APP_SECRET` is required to decrypt saved CalDAV passwords and Google tokens.
+`./backups` is on the same server, so keep copies elsewhere. From Windows, `.\pull-backups.cmd` downloads any new backups into the `backups` folder next to it (keeping the newest 30), and every `.\deploy.cmd` does the same after deploying. To have Windows do it daily at 5 AM (or whenever the PC is next on), set up SSH key sign-in and run `.\pull-backups.cmd -Schedule` once (`-Unschedule` removes it).
+
+Keep a copy of `.env` with your backups: `APP_SECRET` is required to decrypt saved CalDAV passwords and Google/Microsoft tokens.
+
+### Server health and alerts
+
+**Settings → Server health** (admins) shows the running version, uptime, the latest backup, free disk space, database size, linked calendars that aren't syncing, and recent problems. Hearth checks every 15 minutes and emails and pushes the admins, at most once a day per problem, if backups stop, a linked calendar keeps failing for two hours, the disk gets nearly full, or the server restarted unexpectedly. Turn alerts off or send a test from the same page.
 
 ## Configuration reference
 
@@ -208,17 +232,19 @@ docker compose start app
 | `ALLOW_SIGNUP` | `false` | Allow self-registration after the first account |
 | `DEFAULT_TIMEZONE` | `America/Chicago` | Used for feeds with floating times |
 | `SYNC_INTERVAL_MINUTES` | `15` | How often linked calendars and feeds refresh |
-| `SYNC_PAST_DAYS` / `SYNC_FUTURE_DAYS` | `365` / `1095` | Window of CalDAV events kept in sync |
+| `SYNC_PAST_DAYS` / `SYNC_FUTURE_DAYS` | `365` / `1095` | Window of linked-calendar events kept in sync |
 | `BLOCK_PRIVATE_NETWORKS` | `false` | Reject calendar URLs on private IP ranges |
 | `APP_PORT` / `APP_BIND` | `8080` / `0.0.0.0` | Host port and interface for the app |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty | Enables Google linking |
+| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | empty | Enables Outlook / Microsoft 365 linking |
+| `MS_TENANT` | `common` | Set to your organisation's tenant ID to allow only its work accounts |
 | `BACKUP_TIME` / `BACKUP_KEEP_DAYS` | `03:00` / `14` | Nightly backup time and retention |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` / `DIGEST_HOUR` | empty | Fallback email settings; normally set in **Settings → Email** instead |
 
 ## Security notes
 
 - Passwords are hashed with scrypt. Sessions are random tokens stored hashed, in `HttpOnly`, `SameSite=Lax` cookies. Every state-changing request needs a custom header (CSRF protection).
-- CalDAV passwords and Google refresh tokens are encrypted with AES-256-GCM at rest.
+- CalDAV passwords and Google/Microsoft refresh tokens are encrypted with AES-256-GCM at rest.
 - Display links are long random tokens stored hashed. They can only view calendars and lists marked for displays, tick chores, and (if allowed) edit events. They cannot change settings or sharing.
 - Login and registration are rate-limited. The server refuses to fetch loopback and link-local addresses, and can refuse the whole LAN too (`BLOCK_PRIVATE_NETWORKS=true`).
 - If the server is reachable from the internet, use HTTPS and keep `ALLOW_SIGNUP=false`.
@@ -233,7 +259,6 @@ APP_SECRET=$(openssl rand -hex 32) DATABASE_URL=postgres://user:pass@localhost:5
 
 ## Known limitations
 
-- Outlook/Microsoft 365 is read-only (ICS). Two-way sync would need the Microsoft Graph API.
-- "This and following events" edits aren't offered. Use *all events*, or end the series and start a new one.
-- CalDAV sync covers one year back and three years ahead by default.
-- Weather, photo frame, and meal-planning screens from Skylight aren't included.
+- Linked calendars sync one year back and three years ahead by default.
+- Outlook attendees and meeting invitations aren't shown or sent; Hearth edits the event on your own calendar only.
+- Photos are stored in the database (up to 300), so they're included in backups; keep them reasonably sized.
