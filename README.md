@@ -64,7 +64,7 @@ The installer:
 
 The home folder is used because every kind of Docker can read it, including the sandboxed snap version offered during Ubuntu Server setup. If Docker still can't read it, the installer moves everything to `/var/snap/docker/common/hearth` and says so. Set `HEARTH_DIR` to choose another folder.
 
-**To update**, run the same command again. It keeps your `.env` and all your data, downloads the newest version, and restarts. To change settings later, edit `~/hearth/.env` (with `sudo`) and run the command again.
+**To update**, run the same command again. It backs up the database into `backups/`, keeps your `.env` and all your data, downloads the newest version, and restarts. This also works on a server that was set up by hand or with `deploy.cmd`: run it as root and it uses the existing `~/hearth` folder, and keeps a running Cloudflare Tunnel or Caddy by adding `COMPOSE_PROFILES` to `.env`. To change settings later, edit `~/hearth/.env` (with `sudo`) and run the command again.
 
 For an unattended install, set the answers as environment variables, for example `curl -fsSL …/install.sh | sudo HEARTH_BASE_URL=http://192.168.1.50:8080 HEARTH_TIMEZONE=America/Chicago bash`. The other options (`HEARTH_DIR`, `HEARTH_DOMAIN`, `HEARTH_TUNNEL_TOKEN`, `HEARTH_REF`) are listed at the top of [install.sh](install.sh).
 

@@ -145,6 +145,31 @@ done
 # --- Settings ----------------------------------------------------------------------------
 if [ -f .env ]; then
   info "Keeping your existing settings in $DIR/.env"
+
+  # Installs set up by hand start the HTTPS or tunnel add-on with --profile; remember whichever
+  # is running so plain "docker compose up -d" keeps it.
+  if [ -z "$(get_env COMPOSE_PROFILES)" ]; then
+    running() { docker ps -q --filter label=com.docker.compose.project=hearth --filter "label=com.docker.compose.service=$1" 2>/dev/null; }
+    profiles=""
+    { [ -n "$(running cloudflared)" ] || [ -n "$(get_env CLOUDFLARE_TUNNEL_TOKEN)" ]; } && profiles="tunnel"
+    [ -n "$(running caddy)" ] && profiles="${profiles:+$profiles,}https"
+    if [ -n "$profiles" ]; then
+      set_env COMPOSE_PROFILES "$profiles"
+      info "Keeping your add-ons running: COMPOSE_PROFILES=$profiles"
+    fi
+  fi
+
+  # Back up the database before changing anything.
+  if [ -n "$(docker ps -q --filter label=com.docker.compose.project=hearth --filter label=com.docker.compose.service=db 2>/dev/null)" ]; then
+    backup="backups/hearth-$(date +%Y-%m-%d_%H%M)-before-update.sql.gz"
+    info "Backing up the database to $DIR/$backup"
+    if ! docker compose exec -T db pg_dump -U hearth --no-owner hearth | gzip > "$backup.tmp"; then
+      rm -f "$backup.tmp"
+      fail "The backup before updating failed, so Hearth wasn't restarted. See: cd $DIR && docker compose logs db"
+    fi
+    mv "$backup.tmp" "$backup"
+  fi
+
   current_zone="$(get_env DEFAULT_TIMEZONE)"
   fixed_zone="$(normalize_zone "$current_zone")"
   if [ -n "$current_zone" ] && [ "$fixed_zone" != "$current_zone" ]; then
