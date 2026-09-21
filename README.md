@@ -317,3 +317,7 @@ APP_SECRET=$(openssl rand -hex 32) DATABASE_URL=postgres://user:pass@localhost:5
 - Linked calendars sync one year back and three years ahead by default.
 - Outlook attendees and meeting invitations aren't shown or sent; Hearth edits the event on your own calendar only.
 - Photos are stored in the database (up to 300), so they're included in backups; keep them reasonably sized.
+
+## License
+
+[MIT](LICENSE). Use it, change it, and share it freely.
