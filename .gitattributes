@@ -1,0 +1,4 @@
+# The app runs on Linux: keep Unix line endings everywhere, even when checked out on Windows.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.png binary

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Choose a password · Hearth Calendar</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Hearth" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#faf6f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161412" media="(prefers-color-scheme: dark)" />
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <script type="module" src="/js/reset.js"></script>
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <div class="brand big"><span class="brand-mark">◐</span>Hearth</div>
+      <h1 id="reset-title">Choose a password</h1>
+      <p id="reset-subtitle" class="muted">Checking your link…</p>
+      <form id="reset-form" class="stack" novalidate hidden>
+        <input type="email" name="username" autocomplete="username" hidden />
+        <label class="field">
+          <span class="field-label">New password</span>
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required />
+          <span class="hint">At least 8 characters.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Type it again</span>
+          <input name="confirm" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <p id="reset-error" class="error-text" role="alert" hidden></p>
+        <button class="btn primary block" type="submit" id="reset-submit">Save password</button>
+      </form>
+      <p class="center muted"><a href="/login">Back to sign in</a></p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,276 @@
+/* Wall display: large type, touch targets, no page scroll. */
+
+.display-page {
+  height: 100dvh;
+  overflow: hidden;
+  font-size: clamp(15px, 1.05vw, 20px);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.display {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: max(14px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  gap: 10px;
+}
+.display > .auth-card {
+  margin: auto;
+}
+
+.d-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.d-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.d-time {
+  font-size: clamp(38px, 4.2vw, 76px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.d-date {
+  font-size: clamp(18px, 1.7vw, 30px);
+  font-weight: 650;
+  color: var(--ink-2);
+}
+.d-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.d-range {
+  font-weight: 700;
+  color: var(--ink-2);
+  margin-left: 6px;
+  min-width: 10ch;
+}
+.display .btn,
+.display .segmented button {
+  min-height: 46px;
+  font-size: 1em;
+}
+.display .icon-btn {
+  width: 46px;
+  height: 46px;
+  font-size: 28px;
+}
+.display .chip {
+  min-height: 42px;
+  font-size: 1em;
+}
+.display .avatar.sm {
+  width: 32px;
+  height: 32px;
+}
+
+.d-sub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.d-sub .chips:empty {
+  display: none;
+}
+.d-status {
+  margin-left: auto;
+  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
+  color: var(--danger);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 650;
+  font-size: 0.85em;
+}
+
+.d-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.d-body.with-chores {
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 400px);
+}
+
+.d-calendar {
+  min-height: 0;
+  overflow: auto;
+  --cal-height: 100%;
+}
+.d-calendar .month,
+.d-calendar .week {
+  height: 100%;
+  min-height: 0;
+}
+.d-calendar .month-cell {
+  min-height: 0;
+  overflow: hidden;
+}
+.d-calendar .pill {
+  font-size: 0.82em;
+}
+.d-calendar .month-num {
+  font-size: 0.95em;
+}
+.d-calendar .week-body {
+  min-height: 0;
+}
+.d-calendar .ce-title {
+  font-size: 1em;
+}
+.d-calendar .ce-meta {
+  font-size: 0.85em;
+}
+.d-calendar .week-head .dn {
+  font-size: 1.9em;
+}
+.d-calendar .agenda {
+  max-width: none;
+}
+
+.d-chores {
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.d-chores h2 {
+  font-size: 1.25em;
+  margin-bottom: 10px;
+}
+.d-chores .board {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.d-chores .board-col {
+  box-shadow: none;
+  background: var(--surface-2);
+  border-color: transparent;
+  border-top-width: 4px;
+}
+.d-chores .chore {
+  background: var(--surface);
+}
+.d-chores .chore .check {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+}
+
+@media (max-width: 900px), (orientation: portrait) {
+  .display-page {
+    overflow: auto;
+    height: auto;
+  }
+  .display {
+    height: auto;
+    min-height: 100dvh;
+  }
+  .d-body.with-chores {
+    grid-template-columns: 1fr;
+  }
+  .d-calendar .month,
+  .d-calendar .week {
+    height: auto;
+  }
+}
+
+/* Grocery / to-do lists on the side panel */
+.d-section-gap {
+  margin-top: 18px;
+}
+.d-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.d-list {
+  --c: var(--accent);
+  background: var(--surface-2);
+  border-top: 4px solid var(--c);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.d-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.05em;
+}
+.d-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.d-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 10px 6px 6px;
+  border: none;
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: left;
+  font-size: 1em;
+  transition: opacity 0.3s;
+}
+.d-list-item .check {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2.5px solid var(--c);
+  color: transparent;
+  font-weight: 900;
+}
+.d-list-item.done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.d-list-item.done .check {
+  background: var(--c);
+  color: #fff;
+}
+.d-list-empty {
+  padding: 4px 2px;
+}
+.d-quick-add {
+  display: flex;
+  gap: 6px;
+}
+.d-quick-add input {
+  flex: 1;
+  min-height: 44px;
+  font-size: 16px;
+}
+.d-quick-add .btn {
+  min-width: 46px;
+  font-size: 1.3em;
+  padding: 0;
+}

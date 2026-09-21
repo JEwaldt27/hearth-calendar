@@ -1,0 +1,86 @@
+name: hearth
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hearth
+      POSTGRES_USER: hearth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hearth -d hearth"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: ./app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://hearth:${POSTGRES_PASSWORD}@db:5432/hearth
+    ports:
+      # Plain HTTP for your LAN or for a reverse proxy on the host. Set APP_BIND=127.0.0.1 in .env
+      # to hide it when using the Caddy profile below or your own proxy.
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:3000"
+
+  # Nightly database backups into ./backups on the host (see README → Operations).
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${DEFAULT_TIMEZONE:-UTC}
+      BACKUP_TIME: ${BACKUP_TIME:-03:00}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+
+  # Optional automatic HTTPS. Needs a domain pointing at this server and ports 80/443 open:
+  #   docker compose --profile https up -d
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["https"]
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # Optional Cloudflare Tunnel: HTTPS on your Cloudflare domain with no open ports.
+  #   docker compose --profile tunnel up -d
+  # In the Cloudflare dashboard, point the tunnel's public hostname at http://app:3000
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      - app
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

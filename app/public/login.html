@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sign in · Hearth Calendar</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Hearth" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#faf6f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161412" media="(prefers-color-scheme: dark)" />
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <script type="module" src="/js/login.js"></script>
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <div class="brand big"><span class="brand-mark">◐</span>Hearth</div>
+      <h1 id="auth-title">Sign in</h1>
+      <p id="auth-subtitle" class="muted">Your family calendar.</p>
+      <form id="auth-form" class="stack" novalidate>
+        <label class="field" id="name-field" hidden>
+          <span class="field-label">Your name</span>
+          <input name="name" type="text" autocomplete="name" maxlength="80" />
+        </label>
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <label class="field" id="password-field">
+          <span class="field-label">Password</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="auth-error" class="error-text" role="alert" hidden></p>
+        <p id="auth-info" class="hint" role="status" hidden></p>
+        <button class="btn primary block" type="submit" id="auth-submit">Sign in</button>
+      </form>
+      <p class="center" id="forgot-wrap"><button class="link" type="button" id="forgot-btn">Forgot password?</button></p>
+      <p class="center muted" id="switch-wrap" hidden>
+        <span id="switch-text">New here?</span>
+        <button class="link" type="button" id="auth-switch">Create an account</button>
+      </p>
+    </main>
+  </body>
+</html>
