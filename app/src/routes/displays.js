@@ -6,7 +6,13 @@ import { httpError, randomToken, sha256 } from '../lib/security.js';
 
 const router = Router();
 
-const VIEWS = ['month', 'week', 'agenda'];
+const VIEWS = ['month', 'week', 'day', 'agenda'];
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function clampInt(value, min, max, fallback) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
 const THEMES = ['auto', 'light', 'dark'];
 
 function cleanSettings(input = {}, current = {}) {
@@ -17,11 +23,35 @@ function cleanSettings(input = {}, current = {}) {
   if (input.showLists !== undefined) s.showLists = Boolean(input.showLists);
   if (input.weekStartsOn !== undefined) s.weekStartsOn = Number(input.weekStartsOn) === 1 ? 1 : 0;
   if (input.allowEditing !== undefined) s.allowEditing = Boolean(input.allowEditing);
+  for (const key of ['showMeals', 'showWeather', 'showUpNext', 'showCountdowns', 'nightMode', 'photoFrame']) {
+    if (input[key] !== undefined) s[key] = Boolean(input[key]);
+  }
+  if (TIME_RE.test(input.nightStart || '')) s.nightStart = input.nightStart;
+  if (TIME_RE.test(input.nightEnd || '')) s.nightEnd = input.nightEnd;
+  if (input.photoIdleMinutes !== undefined) s.photoIdleMinutes = clampInt(input.photoIdleMinutes, 1, 120, 5);
+  if (input.photoSeconds !== undefined) s.photoSeconds = clampInt(input.photoSeconds, 5, 300, 20);
   return s;
 }
 
 function defaults() {
-  return { view: 'week', theme: 'auto', showChores: true, showLists: false, weekStartsOn: 0, allowEditing: true };
+  return {
+    view: 'week',
+    theme: 'auto',
+    showChores: true,
+    showLists: false,
+    showMeals: false,
+    showWeather: true,
+    showUpNext: true,
+    showCountdowns: true,
+    weekStartsOn: 0,
+    allowEditing: true,
+    nightMode: false,
+    nightStart: '22:00',
+    nightEnd: '06:00',
+    photoFrame: false,
+    photoIdleMinutes: 5,
+    photoSeconds: 20,
+  };
 }
 
 function displayDto(d) {

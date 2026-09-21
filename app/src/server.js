@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendars.js';
 import displayRoutes from './routes/displays.js';
 import eventRoutes from './routes/events.js';
+import householdRoutes from './routes/household.js';
 import { feedApi, serveFeed } from './routes/feeds.js';
 import listRoutes from './routes/lists.js';
 import memberRoutes from './routes/members.js';
@@ -30,7 +31,7 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
-        'img-src': ["'self'", 'data:'],
+        'img-src': ["'self'", 'data:', 'blob:'],
         'upgrade-insecure-requests': config.cookieSecure ? [] : null,
       },
     },
@@ -56,6 +57,7 @@ api.use(listRoutes);
 api.use(displayRoutes);
 api.use(feedApi);
 api.use(pushRoutes);
+api.use(householdRoutes);
 api.use((_req, _res, next) => {
   const err = new Error('Not found');
   err.status = 404;

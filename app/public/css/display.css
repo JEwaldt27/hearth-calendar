@@ -173,7 +173,31 @@
   font-size: 22px;
 }
 
-@media (max-width: 900px), (orientation: portrait) {
+/* Tall screens (a wall tablet mounted in portrait): calendar on top, side panel below, no page scroll. */
+@media (orientation: portrait) and (min-width: 601px) {
+  .d-body.with-chores {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 36vh);
+  }
+  .d-chores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-content: start;
+    gap: 0 16px;
+  }
+  .d-chores > h2 {
+    grid-column: 1 / -1;
+  }
+  .d-calendar .week-head .dn {
+    font-size: 1.4em;
+  }
+  .d-calendar .ce-title {
+    font-size: 0.9em;
+  }
+}
+
+/* Small screens (phones): let the page scroll. */
+@media (max-width: 600px) {
   .display-page {
     overflow: auto;
     height: auto;
@@ -273,4 +297,148 @@
   min-width: 46px;
   font-size: 1.3em;
   padding: 0;
+}
+
+/* Weather */
+.d-weather {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  border: none;
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: clamp(16px, 1.3vw, 24px);
+  font-weight: 650;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  align-self: center;
+}
+.wx-icon {
+  font-size: 1.3em;
+}
+.wx-range,
+.wx-rain {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.wx-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.wx-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.wx-big {
+  font-size: 40px;
+}
+
+/* Up next */
+.d-upnext {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 1.05em;
+}
+.upnext-item {
+  --c: var(--accent);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 7px 14px;
+  box-shadow: inset 4px 0 0 var(--c), var(--shadow);
+}
+.upnext-item.now {
+  --c: var(--ok);
+}
+
+/* Night mode */
+.d-night {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #000;
+  color: #8a7f74;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.night-time {
+  font-size: clamp(64px, 14vw, 220px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.night-date {
+  font-size: clamp(18px, 2.4vw, 40px);
+}
+.night-hint {
+  position: absolute;
+  bottom: 24px;
+  font-size: 14px;
+  opacity: 0.45;
+}
+
+/* Photo frame */
+.d-photos {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: #000;
+  cursor: pointer;
+}
+.pf-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.pf-img.on {
+  opacity: 1;
+}
+.pf-clock {
+  position: absolute;
+  left: 28px;
+  bottom: 24px;
+  color: #fff;
+  font-size: clamp(20px, 2.4vw, 40px);
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* Keep all seven days side by side on display screens (the app itself stacks them on narrow screens). */
+@media (min-width: 601px) {
+  .d-calendar .week {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .d-calendar .week-col {
+    min-height: 0;
+  }
+}
+@media (orientation: portrait) and (min-width: 601px) {
+  .d-calendar .week-head {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 8px 4px;
+  }
+  .d-calendar .week-body {
+    padding: 2px 5px 8px;
+  }
+  .d-calendar .card-event {
+    padding: 5px 6px 5px 9px;
+  }
 }

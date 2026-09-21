@@ -4,6 +4,11 @@ export function setDisplayToken(token) {
   displayToken = token;
 }
 
+/** Headers for requests made outside api(), e.g. fetching photos as blobs. */
+export function authHeaders() {
+  return displayToken ? { Authorization: `Display ${displayToken}` } : {};
+}
+
 export class ApiError extends Error {
   constructor(status, message) {
     super(message);

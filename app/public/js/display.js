@@ -1,6 +1,7 @@
 import { get, post, setDisplayToken } from './api.js';
 import { renderCalendar, shiftDate, viewRange, viewTitle, dayEvents, eventCard } from './calendar-view.js';
 import { renderChoreBoard, toggleItem } from './chores.js';
+import { nightOverlay, photoFrame, upNextStrip, weatherWidget } from './display-extras.js';
 import { openEventDetails, openEventEditor } from './event-editor.js';
 import { add, avatar, clear, fmtDate, h, modal, sameDay, toast, ymd } from './util.js';
 
@@ -18,12 +19,10 @@ function storage(action, key, value) {
   return null;
 }
 
-// A token in the URL fragment (never sent to the server in logs) is remembered, then removed from the address bar.
+// The token lives in the URL fragment, which browsers never send to the server. It stays in the
+// address bar so an iPad "Add to Home Screen" icon (which gets its own storage) keeps working.
 const fromHash = new URLSearchParams(location.hash.slice(1)).get('token');
-if (fromHash) {
-  storage('set', TOKEN_KEY, fromHash);
-  history.replaceState(null, '', '/display');
-}
+if (fromHash) storage('set', TOKEN_KEY, fromHash);
 const token = fromHash || storage('get', TOKEN_KEY);
 if (token) setDisplayToken(token);
 
@@ -36,6 +35,9 @@ const state = {
   lists: [],
   checklists: [],
   events: [],
+  upcoming: [],
+  lastWeather: 0,
+  lastPhotoList: 0,
   items: [],
   memberFilter: new Set(),
   lastInteraction: Date.now(),
@@ -248,6 +250,29 @@ function drawChecklists() {
   }
 }
 
+/** Events in the next 24 hours, for the "Up next" strip (independent of the calendar view). */
+async function refreshUpcoming() {
+  if (!els.upNext) return;
+  const now = new Date();
+  try {
+    const { events } = await get(`/events?display=1&from=${encodeURIComponent(new Date(now - 12 * 3600000).toISOString())}&to=${encodeURIComponent(new Date(now.getTime() + 24 * 3600000).toISOString())}`);
+    state.upcoming = events;
+  } catch {
+    /* keep the previous list */
+  }
+  drawUpNext();
+}
+
+function drawUpNext() {
+  if (!els.upNext) return;
+  const byId = cals();
+  const visible = state.upcoming.filter((ev) => {
+    const cal = byId.get(ev.calendarId);
+    return cal && (!state.memberFilter.size || state.memberFilter.has(cal.memberId));
+  });
+  els.upNext.update(visible, ctx());
+}
+
 async function refreshEvents() {
   const { start, end } = viewRange(state.view, state.date, state.settings.weekStartsOn);
   try {
@@ -271,6 +296,15 @@ async function refreshAll() {
     els.status.hidden = true;
   } catch (err) {
     handleError(err);
+  }
+  await refreshUpcoming();
+  if (els.weather && Date.now() - state.lastWeather > 10 * 60000) {
+    state.lastWeather = Date.now();
+    els.weather.refresh();
+  }
+  if (els.photos && Date.now() - state.lastPhotoList > 30 * 60000) {
+    state.lastPhotoList = Date.now();
+    els.photos.loadList();
   }
   drawChips();
   const typing = els.listsBox?.contains(document.activeElement) && document.activeElement.value;
@@ -313,9 +347,14 @@ function build() {
   els.chips = h('div', { class: 'chips' });
   els.calendar = h('div', { class: 'calendar-root d-calendar' });
   els.status = h('div', { class: 'd-status', hidden: true });
+  els.weather = s.showWeather ? weatherWidget() : null;
+  els.upNext = s.showUpNext ? upNextStrip() : null;
+  els.night = s.nightMode ? nightOverlay(s) : null;
+  els.photos = s.photoFrame ? photoFrame(s, { idleMs: () => s.photoIdleMinutes * 60000 }) : null;
   els.viewButtons = [
     ['month', 'Month'],
     ['week', 'Week'],
+    ['day', 'Day'],
     ['agenda', 'Schedule'],
   ].map(([v, label]) =>
     h(
@@ -346,7 +385,7 @@ function build() {
     h(
       'header',
       { class: 'd-top' },
-      h('div', { class: 'd-clock' }, els.time, els.date),
+      h('div', { class: 'd-clock' }, els.time, els.date, els.weather?.el),
       h(
         'div',
         { class: 'd-controls' },
@@ -358,8 +397,10 @@ function build() {
           : null,
       ),
     ),
-    h('div', { class: 'd-sub' }, els.chips, els.status),
+    h('div', { class: 'd-sub' }, els.upNext?.el, els.chips, els.status),
     h('div', { class: `d-body${els.side ? ' with-chores' : ''}` }, els.calendar, els.side),
+    els.photos?.el,
+    els.night?.el,
   );
 }
 
@@ -380,7 +421,11 @@ async function boot() {
   drawClock();
   await refreshAll().catch(() => {});
 
-  setInterval(drawClock, 1000);
+  setInterval(() => {
+    drawClock();
+    const night = els.night ? els.night.tick() : false;
+    els.photos?.tick(state.lastInteraction, night || Boolean(document.querySelector('.backdrop')));
+  }, 1000);
   setInterval(() => {
     const today = ymd(new Date());
     // After a few idle minutes, drift back to today's default view.

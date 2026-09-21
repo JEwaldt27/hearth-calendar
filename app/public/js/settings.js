@@ -22,11 +22,13 @@ const SECTIONS = [
   ['lists', 'Lists'],
   ['accounts', 'Linked accounts'],
   ['displays', 'Wall displays'],
+  ['photos', 'Photos'],
+  ['household', 'Household'],
   ['users', 'Users'],
   ['email', 'Email'],
 ];
 
-const ADMIN_SECTIONS = new Set(['users', 'email']);
+const ADMIN_SECTIONS = new Set(['household', 'users', 'email']);
 
 const SOURCE_LABEL = { local: 'Hearth', ics: 'ICS subscription', caldav: 'CalDAV', google: 'Google' };
 
@@ -51,7 +53,7 @@ export function renderSettings(root, app, section = 'profile', params = new URLS
   add(root, h('div', { class: 'settings' }, nav, panel));
 
   if (params.get('error')) toast(params.get('error'), 'error');
-  const renderers = { profile, family, calendars, lists, accounts, displays, users, email };
+  const renderers = { profile, family, calendars, lists, accounts, displays, photos: photosSection, household, users, email };
   Promise.resolve()
     .then(() => renderers[section](panel, app, params))
     .catch((err) => add(clear(panel), h('p', { class: 'error-text' }, err.message)));
@@ -667,14 +669,57 @@ function showLink(token) {
 }
 
 function displaySettingsForm(d, onSave) {
-  const s = { view: 'week', theme: 'auto', showChores: true, showLists: false, weekStartsOn: 0, allowEditing: true, ...(d?.settings || {}) };
+  const s = {
+    view: 'week',
+    theme: 'auto',
+    showChores: true,
+    showLists: false,
+    showMeals: false,
+    showWeather: true,
+    showUpNext: true,
+    showCountdowns: true,
+    weekStartsOn: 0,
+    allowEditing: true,
+    nightMode: false,
+    nightStart: '22:00',
+    nightEnd: '06:00',
+    photoFrame: false,
+    photoIdleMinutes: 5,
+    photoSeconds: 20,
+    ...(d?.settings || {}),
+  };
   const name = h('input', { type: 'text', value: d?.name || 'Kitchen display', maxlength: 80 });
-  const view = h('select', {}, [['week', 'Week'], ['month', 'Month'], ['agenda', 'Schedule']].map(([v, l]) => h('option', { value: v, selected: s.view === v }, l)));
+  const view = h('select', {}, [['week', 'Week'], ['month', 'Month'], ['day', 'Day'], ['agenda', 'Schedule']].map(([v, l]) => h('option', { value: v, selected: s.view === v }, l)));
   const theme = h('select', {}, [['auto', 'Match device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: s.theme === v }, l)));
   const week = h('select', {}, h('option', { value: 0, selected: s.weekStartsOn === 0 }, 'Sunday'), h('option', { value: 1, selected: s.weekStartsOn === 1 }, 'Monday'));
-  const chores = h('input', { type: 'checkbox', checked: s.showChores });
-  const showLists = h('input', { type: 'checkbox', checked: s.showLists });
-  const editing = h('input', { type: 'checkbox', checked: s.allowEditing });
+  const box = (checked) => h('input', { type: 'checkbox', checked });
+  const chores = box(s.showChores);
+  const showLists = box(s.showLists);
+  const showMeals = box(s.showMeals);
+  const showWeather = box(s.showWeather);
+  const showUpNext = box(s.showUpNext);
+  const showCountdowns = box(s.showCountdowns);
+  const editing = box(s.allowEditing);
+  const night = box(s.nightMode);
+  const nightStart = h('input', { type: 'time', value: s.nightStart });
+  const nightEnd = h('input', { type: 'time', value: s.nightEnd });
+  const photos = box(s.photoFrame);
+  const idle = h('select', {}, [1, 2, 5, 10, 15, 30, 60].map((m) => h('option', { value: m, selected: m === s.photoIdleMinutes }, `${m} min`)));
+  const seconds = h('select', {}, [5, 10, 15, 20, 30, 60, 120].map((sec) => h('option', { value: sec, selected: sec === s.photoSeconds }, sec < 60 ? `${sec} seconds` : `${sec / 60} min`)));
+  const nightRow = h('div', { class: 'row gap-s wrap indent' }, h('span', { class: 'muted' }, 'From'), nightStart, h('span', { class: 'muted' }, 'to'), nightEnd);
+  const photoRow = h(
+    'div',
+    { class: 'stack gap-s indent' },
+    h('div', { class: 'row gap-s wrap' }, h('span', { class: 'muted' }, 'Start after'), idle, h('span', { class: 'muted' }, 'untouched, change every'), seconds),
+    h('p', { class: 'hint' }, 'Add photos under Settings → Photos (the photos of the account that owns this display are used).'),
+  );
+  const sync = () => {
+    nightRow.hidden = !night.checked;
+    photoRow.hidden = !photos.checked;
+  };
+  night.addEventListener('change', sync);
+  photos.addEventListener('change', sync);
+  sync();
   const save = h('button', { class: 'btn primary' }, d ? 'Save' : 'Create display');
   const m = modal({
     title: d ? 'Display settings' : 'New wall display',
@@ -682,11 +727,19 @@ function displaySettingsForm(d, onSave) {
       'div',
       { class: 'stack' },
       field('Name', name),
-      field('Default view', view),
-      field('Theme', theme),
-      field('Week starts on', week),
-      h('label', { class: 'check' }, chores, ' Show today’s chores'),
-      h('label', { class: 'check' }, showLists, ' Show grocery & to-do lists'),
+      h('div', { class: 'row gap wrap' }, field('Default view', view), field('Theme', theme), field('Week starts on', week)),
+      h('h3', {}, 'Show on screen'),
+      h('label', { class: 'check' }, showWeather, ' Weather (set the location in Settings → Household)'),
+      h('label', { class: 'check' }, showUpNext, ' “Up next” strip'),
+      h('label', { class: 'check' }, showCountdowns, ' Countdowns'),
+      h('label', { class: 'check' }, chores, ' Today’s chores'),
+      h('label', { class: 'check' }, showLists, ' Grocery & to-do lists'),
+      h('label', { class: 'check' }, showMeals, ' Meal plan'),
+      h('h3', {}, 'Screen'),
+      h('label', { class: 'check' }, night, ' Night mode: dim to a clock overnight'),
+      nightRow,
+      h('label', { class: 'check' }, photos, ' Photo frame when nobody is using it'),
+      photoRow,
       h('label', { class: 'check' }, editing, ' Allow adding events and list items from the display'),
       h('p', { class: 'hint' }, 'Choose exactly which calendars and lists appear with the “Show on my wall displays” switches in Settings → Calendars and Settings → Lists.'),
     ),
@@ -695,7 +748,27 @@ function displaySettingsForm(d, onSave) {
   save.addEventListener(
     'click',
     busy(save, async () => {
-      await onSave({ name: name.value, settings: { view: view.value, theme: theme.value, weekStartsOn: Number(week.value), showChores: chores.checked, showLists: showLists.checked, allowEditing: editing.checked } });
+      await onSave({
+        name: name.value,
+        settings: {
+          view: view.value,
+          theme: theme.value,
+          weekStartsOn: Number(week.value),
+          showChores: chores.checked,
+          showLists: showLists.checked,
+          showMeals: showMeals.checked,
+          showWeather: showWeather.checked,
+          showUpNext: showUpNext.checked,
+          showCountdowns: showCountdowns.checked,
+          allowEditing: editing.checked,
+          nightMode: night.checked,
+          nightStart: nightStart.value || '22:00',
+          nightEnd: nightEnd.value || '06:00',
+          photoFrame: photos.checked,
+          photoIdleMinutes: Number(idle.value),
+          photoSeconds: Number(seconds.value),
+        },
+      });
       m.close();
     }),
   );
@@ -1206,4 +1279,157 @@ async function feedDialog(calendar) {
     ),
     actions: [reset, h('button', { class: 'btn', onclick: () => m.close() }, 'Done'), webcal, copy],
   });
+}
+
+// --- Photos (for the display's photo frame) -----------------------------------------
+
+/** Shrinks a photo to at most 1920px on its long side and re-encodes it as JPEG. */
+async function shrinkImage(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  return { blob, width, height };
+}
+
+async function photosSection(panel, app) {
+  const grid = h('div', { class: 'photo-grid' });
+  const count = h('span', { class: 'muted' });
+  const draw = async () => {
+    const { photos } = await get('/photos');
+    count.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'}`;
+    add(
+      clear(grid),
+      photos.length
+        ? photos.map((p) =>
+            h(
+              'figure',
+              { class: 'photo-tile' },
+              h('img', { src: `/api/photos/${p.id}`, alt: '', loading: 'lazy' }),
+              h(
+                'button',
+                {
+                  class: 'icon-btn photo-remove',
+                  'aria-label': 'Delete photo',
+                  onclick: async () => {
+                    if (!(await confirmDialog('Delete this photo from the photo frame?', { okLabel: 'Delete', danger: true }))) return;
+                    await del(`/photos/${p.id}`).catch((e) => toast(e.message, 'error'));
+                    draw();
+                  },
+                },
+                '✕',
+              ),
+            ),
+          )
+        : h('p', { class: 'muted pad' }, 'No photos yet.'),
+    );
+  };
+  const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+  const upload = h('button', { class: 'btn primary', onclick: () => input.click() }, '+ Add photos');
+  input.addEventListener('change', async () => {
+    const files = [...input.files];
+    input.value = '';
+    if (!files.length) return;
+    upload.disabled = true;
+    let done = 0;
+    for (const file of files) {
+      upload.textContent = `Uploading ${done + 1} of ${files.length}…`;
+      try {
+        const { blob, width, height } = await shrinkImage(file);
+        const res = await fetch('/api/photos', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'image/jpeg', 'X-Requested-With': 'fetch', 'X-Image-Width': width, 'X-Image-Height': height },
+          body: blob,
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+        done += 1;
+      } catch (err) {
+        toast(`${file.name}: ${err.message}`, 'error');
+      }
+    }
+    upload.disabled = false;
+    upload.textContent = '+ Add photos';
+    if (done) toast(`Added ${done} photo${done === 1 ? '' : 's'}`);
+    draw();
+  });
+  add(
+    panel,
+    heading('Photos', 'Family photos for the wall display’s photo frame. Turn it on in Settings → Wall displays.', count, upload, input),
+    h('div', { class: 'card' }, grid),
+    h('p', { class: 'hint' }, 'Photos are resized to 1920 pixels and stored on your server (they are included in backups).'),
+  );
+  await draw();
+}
+
+// --- Household (admin): location for weather, units -----------------------------------
+
+async function household(panel) {
+  let { household: current } = await get('/household');
+  const status = h('p', {});
+  const drawStatus = () => {
+    status.textContent = current.configured ? `📍 ${current.placeName}` : 'No location set, so the display won’t show weather.';
+  };
+  drawStatus();
+  const search = h('input', { type: 'text', placeholder: 'Search for your city or town…' });
+  const results = h('div', { class: 'list' });
+  const find = h('button', { class: 'btn' }, 'Search');
+  const runSearch = busy(find, async () => {
+    const { results: found } = await get(`/admin/geocode?q=${encodeURIComponent(search.value)}`);
+    add(
+      clear(results),
+      found.length
+        ? found.map((r) =>
+            h(
+              'button',
+              {
+                class: 'list-row geo-result',
+                onclick: async () => {
+                  current = (await put('/admin/household', { latitude: r.latitude, longitude: r.longitude, placeName: r.name })).household;
+                  clear(results);
+                  search.value = '';
+                  drawStatus();
+                  toast('Location saved');
+                },
+              },
+              '📍 ',
+              r.name,
+            ),
+          )
+        : h('p', { class: 'muted' }, 'No places found.'),
+    );
+  });
+  find.addEventListener('click', runSearch);
+  search.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), runSearch()));
+  const units = h(
+    'select',
+    {
+      onchange: async (e) => {
+        current = (await put('/admin/household', { units: e.target.value })).household;
+        toast('Saved');
+      },
+    },
+    h('option', { value: 'fahrenheit', selected: current.units !== 'celsius' }, '°F (Fahrenheit)'),
+    h('option', { value: 'celsius', selected: current.units === 'celsius' }, '°C (Celsius)'),
+  );
+  add(
+    panel,
+    heading('Household', 'Settings for the whole family.'),
+    h(
+      'div',
+      { class: 'card stack' },
+      h('h3', {}, 'Location for weather'),
+      status,
+      h('div', { class: 'row gap-s' }, search, find),
+      results,
+      h('p', { class: 'hint' }, 'Weather comes from Open-Meteo (free, no account). Only the location is sent to it.'),
+    ),
+    h('div', { class: 'card stack' }, field('Temperature units', units)),
+  );
 }
