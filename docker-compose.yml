@@ -26,6 +26,10 @@ services:
     environment:
       PORT: 3000
       DATABASE_URL: postgres://hearth:${POSTGRES_PASSWORD}@db:5432/hearth
+      BACKUP_DIR: /backups
+    volumes:
+      # Read-only, so Settings → Server health can report on backups and disk space.
+      - ./backups:/backups:ro
     ports:
       # Plain HTTP for your LAN or for a reverse proxy on the host. Set APP_BIND=127.0.0.1 in .env
       # to hide it when using the Caddy profile below or your own proxy.

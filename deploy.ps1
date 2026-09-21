@@ -68,6 +68,8 @@ $steps = @(
   'tar -xzf ~/hearth-deploy.tar.gz -C {DIR}',
   'rm -f ~/hearth-deploy.tar.gz',
   'echo {COMMIT} > DEPLOYED',
+  'echo {COMMIT} > app/VERSION',
+  'mkdir -p backups',
   'docker compose --profile {PROFILE} up -d --build',
   'echo Waiting for Hearth to start...',
   'ok=0; for i in $(seq 1 45); do if docker compose exec -T app wget -qO- http://127.0.0.1:3000/healthz >/dev/null 2>&1; then ok=1; break; fi; sleep 2; done',
@@ -83,6 +85,13 @@ Remove-Item $archive -Force -ErrorAction SilentlyContinue
 if ($code -eq 0) {
   Write-Host ''
   Write-Host "Deployed $commit. Hearth is up." -ForegroundColor Green
+  # Keep a copy of the nightly backups on this PC too.
+  Step 'Copying new backups to this PC'
+  try {
+    & (Join-Path $root 'pull-backups.ps1') -Server $Server -RemoteDir $RemoteDir
+  } catch {
+    Write-Warning "Couldn't copy backups: $($_.Exception.Message)"
+  }
 } elseif ($code -eq 3) {
   Write-Host ''
   Write-Host 'The update was installed but Hearth did not report healthy within 90 seconds.' -ForegroundColor Yellow

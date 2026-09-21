@@ -2,6 +2,7 @@ import { findMaster, parseIcs, splitFeed } from '../calendar/ical.js';
 import { setSyncTrigger, upsertObject } from '../calendar/store.js';
 import { config } from '../config.js';
 import { many, one, query, transaction } from '../db.js';
+import { recordProblem } from '../lib/health.js';
 import { fetchChangedResources, fetchFeed, remoteCtag } from './remote.js';
 
 const running = new Map();
@@ -67,12 +68,16 @@ async function runSync(calendarId, force) {
   try {
     if (calendar.source === 'ics') await syncFeed(calendar);
     else await syncDav(calendar, force);
-    await query('UPDATE calendars SET last_synced_at = now(), sync_error = NULL WHERE id = $1', [calendarId]);
+    await query('UPDATE calendars SET last_synced_at = now(), sync_error = NULL, sync_failing_since = NULL WHERE id = $1', [calendarId]);
     return null;
   } catch (err) {
     const message = String(err.message || err).slice(0, 500);
     console.warn(`Sync failed for calendar ${calendarId}: ${message}`);
-    await query('UPDATE calendars SET last_synced_at = now(), sync_error = $1 WHERE id = $2', [message, calendarId]);
+    recordProblem('sync', `${calendar.name}: ${message}`);
+    await query(
+      'UPDATE calendars SET last_synced_at = now(), sync_error = $1, sync_failing_since = COALESCE(sync_failing_since, now()) WHERE id = $2',
+      [message, calendarId],
+    );
     return message;
   }
 }

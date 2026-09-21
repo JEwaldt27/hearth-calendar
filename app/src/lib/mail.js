@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 import { one, query } from '../db.js';
+import { recordProblem } from './health.js';
 import { decrypt, encrypt, httpError } from './security.js';
 
 /**
@@ -99,6 +100,7 @@ export async function sendMail({ to, subject, text, html }, settings) {
     await t.sendMail({ from: `Hearth Calendar <${s.from}>`, to, subject, text, html });
   } catch (err) {
     console.warn(`Email to ${to} failed: ${err.message}`);
+    if (!settings) recordProblem('email', `To ${to}: ${friendlyMailError(err)}`);
     throw httpError(502, `The email could not be sent: ${friendlyMailError(err)}`);
   }
 }

@@ -1377,3 +1377,41 @@
   border-radius: 50%;
   background: var(--danger);
 }
+
+/* --- Server health ------------------------------------------------------------------ */
+
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.health-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.health-value {
+  font-size: 20px;
+  font-weight: 800;
+}
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+.health-dot.ok {
+  background: var(--ok);
+}
+.health-dot.warn {
+  background: #e5a334;
+}
+.health-dot.bad {
+  background: var(--danger);
+}

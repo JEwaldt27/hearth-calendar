@@ -8,6 +8,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
 COPY public ./public
+COPY VERSION ./VERSION
 
 USER node
 EXPOSE 3000

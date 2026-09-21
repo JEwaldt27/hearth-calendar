@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendars.js';
 import displayRoutes from './routes/displays.js';
 import eventRoutes from './routes/events.js';
+import healthRoutes from './routes/health.js';
 import householdRoutes from './routes/household.js';
 import rewardRoutes from './routes/rewards.js';
 import { feedApi, serveFeed } from './routes/feeds.js';
@@ -16,6 +17,7 @@ import listRoutes from './routes/lists.js';
 import memberRoutes from './routes/members.js';
 import pushRoutes from './routes/push.js';
 import { startDigestScheduler } from './lib/digest.js';
+import { markCleanShutdown, startAlerts } from './lib/alerts.js';
 import { initPush } from './lib/push.js';
 import { startReminderScheduler } from './lib/reminders.js';
 import { loadMailSettings } from './lib/mail.js';
@@ -59,6 +61,7 @@ api.use(displayRoutes);
 api.use(feedApi);
 api.use(pushRoutes);
 api.use(householdRoutes);
+api.use(healthRoutes);
 api.use(rewardRoutes);
 api.use((_req, _res, next) => {
   const err = new Error('Not found');
@@ -90,9 +93,11 @@ app.listen(config.port, () => {
 startScheduler();
 startDigestScheduler();
 startReminderScheduler();
+startAlerts();
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
+    await markCleanShutdown();
     await pool.end().catch(() => {});
     process.exit(0);
   });

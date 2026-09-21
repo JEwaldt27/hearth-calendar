@@ -26,9 +26,10 @@ const SECTIONS = [
   ['household', 'Household'],
   ['users', 'Users'],
   ['email', 'Email'],
+  ['health', 'Server health'],
 ];
 
-const ADMIN_SECTIONS = new Set(['household', 'users', 'email']);
+const ADMIN_SECTIONS = new Set(['household', 'users', 'email', 'health']);
 
 const SOURCE_LABEL = { local: 'Hearth', ics: 'ICS subscription', caldav: 'CalDAV', google: 'Google' };
 
@@ -53,7 +54,7 @@ export function renderSettings(root, app, section = 'profile', params = new URLS
   add(root, h('div', { class: 'settings' }, nav, panel));
 
   if (params.get('error')) toast(params.get('error'), 'error');
-  const renderers = { profile, family, calendars, lists, accounts, displays, photos: photosSection, household, users, email };
+  const renderers = { profile, family, calendars, lists, accounts, displays, photos: photosSection, household, users, email, health };
   Promise.resolve()
     .then(() => renderers[section](panel, app, params))
     .catch((err) => add(clear(panel), h('p', { class: 'error-text' }, err.message)));
@@ -1511,5 +1512,117 @@ function holidayDialog(app) {
       await app.reload();
       app.route();
     }),
+  );
+}
+
+// --- Server health (admin) ------------------------------------------------------------
+
+function bytes(n) {
+  if (n === null || n === undefined) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function ago(iso) {
+  if (!iso) return 'never';
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
+function uptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
+}
+
+async function health(panel) {
+  const data = await get('/admin/health');
+  const status = (ok, warn = false) => h('span', { class: `health-dot ${ok ? (warn ? 'warn' : 'ok') : 'bad'}` });
+  const backupAge = data.backups.latest ? Date.now() - new Date(data.backups.latest.at) : Infinity;
+  const diskFreeRatio = data.disk ? data.disk.free / data.disk.total : 1;
+  const failing = data.calendars.filter((c) => c.error);
+
+  const tile = (dot, label, value, sub) => h('div', { class: 'health-tile' }, h('div', { class: 'row gap-s' }, dot, h('strong', {}, label)), h('span', { class: 'health-value' }, value), sub ? h('small', { class: 'muted' }, sub) : null);
+
+  const alertsToggle = toggle('Email and push admins when something needs attention', data.alerts.enabled, async (on, input) => {
+    try {
+      await put('/admin/alerts', { enabled: on });
+      toast(on ? 'Alerts on' : 'Alerts off');
+    } catch (err) {
+      input.checked = !on;
+      toast(err.message, 'error');
+    }
+  });
+  const testAlert = h('button', { class: 'btn ghost' }, 'Send a test alert');
+  testAlert.addEventListener(
+    'click',
+    busy(testAlert, async () => {
+      const r = await post('/admin/alerts/test');
+      toast(r.mail ? 'Test alert sent by email and to devices with reminders on.' : 'Test alert sent to devices with reminders on (email isn’t set up).');
+    }),
+  );
+
+  add(
+    panel,
+    heading('Server health', `Hearth ${data.version} · running for ${uptime(data.uptimeSeconds)} · Node ${data.node}`, h('button', { class: 'btn', onclick: () => (clear(panel), health(panel)) }, 'Refresh')),
+    h(
+      'div',
+      { class: 'health-grid' },
+      tile(
+        status(data.backups.available && backupAge < 30 * 3600000, backupAge > 26 * 3600000),
+        'Backups',
+        !data.backups.available ? 'Not visible' : data.backups.latest ? ago(data.backups.latest.at) : 'None yet',
+        data.backups.available ? `${data.backups.count} kept · ${bytes(data.backups.totalBytes)}` : 'Update docker-compose.yml so the app can see ./backups',
+      ),
+      tile(status(diskFreeRatio > 0.1, diskFreeRatio < 0.2), 'Disk space', data.disk ? `${bytes(data.disk.free)} free` : 'Unknown', data.disk ? `of ${bytes(data.disk.total)}` : null),
+      tile(status(!failing.length), 'Linked calendars', failing.length ? `${failing.length} not syncing` : data.calendars.length ? 'All syncing' : 'None linked', `${data.calendars.length} linked or subscribed`),
+      tile(status(true), 'Database', bytes(data.database.bytes), `${data.counts.users} people · ${data.counts.events} events`),
+      tile(status(data.mailEnabled, !data.mailEnabled), 'Email', data.mailEnabled ? 'On' : 'Off', data.mailEnabled ? null : 'Settings → Email'),
+      tile(status(true), 'Devices', `${data.counts.devices} with reminders`, `${data.counts.displays} wall display${data.counts.displays === 1 ? '' : 's'}${data.counts.displaySeen ? ` · last seen ${ago(data.counts.displaySeen)}` : ''}`),
+    ),
+    h('div', { class: 'card stack' }, h('h3', {}, 'Problem alerts'), h('p', { class: 'muted' }, 'Hearth checks every 15 minutes and tells admins, at most once a day per problem, if backups stop, a linked calendar keeps failing, the disk is nearly full, or the server restarted unexpectedly.'), h('div', { class: 'row gap wrap' }, alertsToggle, testAlert)),
+    data.calendars.length
+      ? h(
+          'div',
+          { class: 'card list' },
+          data.calendars.map((c) =>
+            h(
+              'div',
+              { class: 'list-row' },
+              status(!c.error),
+              h(
+                'div',
+                { class: 'grow' },
+                h('strong', {}, c.name),
+                h('small', { class: c.error ? 'error-text' : 'muted' }, c.error ? `${c.error}${c.failingSince ? ` · failing since ${new Date(c.failingSince).toLocaleString()}` : ''}` : `${c.owner} · synced ${ago(c.lastSyncedAt)}`),
+              ),
+              h('span', { class: 'badge' }, SOURCE_LABEL[c.source] || c.source),
+            ),
+          ),
+        )
+      : null,
+    h(
+      'div',
+      { class: 'card stack' },
+      h('h3', {}, 'Recent problems'),
+      data.problems.length
+        ? h(
+            'div',
+            { class: 'list' },
+            data.problems.map((p) => h('div', { class: 'list-row' }, h('span', { class: 'badge' }, p.kind), h('div', { class: 'grow' }, h('span', {}, p.message), h('small', { class: 'muted' }, new Date(p.at).toLocaleString())))),
+          )
+        : h('p', { class: 'muted' }, 'Nothing since the server last started. 👍'),
+    ),
   );
 }

@@ -1,6 +1,7 @@
 import webpush from 'web-push';
 import { config } from '../config.js';
 import { many, one, query } from '../db.js';
+import { recordProblem } from './health.js';
 import { mailSettings } from './mail.js';
 import { decrypt, encrypt } from './security.js';
 
@@ -72,6 +73,7 @@ export async function sendToUser(userId, payload) {
         await query('DELETE FROM push_subscriptions WHERE id = $1', [s.id]);
       } else {
         console.warn(`Push to a device of user ${userId} failed: ${err.statusCode || ''} ${err.body || err.message}`);
+        recordProblem('push', `${err.statusCode || ''} ${err.body || err.message}`.trim());
       }
     }
   }
