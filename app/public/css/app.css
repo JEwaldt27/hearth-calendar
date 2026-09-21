@@ -909,7 +909,7 @@
     z-index: 20;
     margin: 0;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0;
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -918,9 +918,9 @@
   }
   .tabs a {
     text-align: center;
-    padding: 10px 4px;
+    padding: 10px 2px;
     border-radius: 12px;
-    font-size: 14px;
+    font-size: 13px;
   }
   .tabs a.active {
     background: var(--accent-soft);
@@ -988,4 +988,188 @@
 .modal h3 {
   font-size: 15px;
   margin-top: 6px;
+}
+
+/* --- Stars, rewards, usuals, who-added -------------------------------------------- */
+
+.star-chip {
+  font-weight: 800;
+  font-size: 14px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #e5c134 25%, var(--surface));
+  white-space: nowrap;
+}
+.star-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.star-person {
+  --c: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border-top: 4px solid var(--c);
+}
+.star-balance {
+  font-size: 22px;
+  font-weight: 800;
+}
+.star-delta {
+  min-width: 46px;
+  text-align: center;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.star-delta.plus {
+  background: color-mix(in srgb, var(--ok) 20%, var(--surface));
+  color: var(--ok);
+}
+.star-delta.minus {
+  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
+  color: var(--danger);
+}
+.staples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.staple {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.staple.on {
+  background: color-mix(in srgb, var(--ok) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+}
+.staple-add {
+  border: none;
+  background: none;
+  padding: 8px 6px 8px 14px;
+  font-weight: 650;
+}
+.staple-add:disabled {
+  cursor: default;
+  color: var(--ok);
+}
+.staple-remove {
+  border: none;
+  background: none;
+  padding: 8px 12px 8px 6px;
+  color: var(--muted);
+}
+.item-title {
+  display: flex;
+  flex-direction: column;
+}
+.item-who {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+/* --- Meals ------------------------------------------------------------------------ */
+
+.meal-grid {
+  --slots: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 1000px;
+}
+.meal-row {
+  display: grid;
+  grid-template-columns: 76px repeat(var(--slots), minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+.meal-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+.meal-day .wd {
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.meal-day .dn {
+  font-size: 22px;
+  font-weight: 800;
+}
+.meal-row.today .meal-day {
+  border-color: var(--accent);
+}
+.meal-row.today .meal-day .wd,
+.meal-row.today .meal-day .dn {
+  color: var(--accent);
+}
+.meal-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 62px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.meal-slot-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.meal-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: none;
+  border-radius: 10px;
+  padding: 7px 12px;
+  background: color-mix(in srgb, #e56fa5 16%, var(--surface));
+  box-shadow: inset 4px 0 0 #e56fa5;
+  font-weight: 700;
+  text-align: left;
+}
+.meal-chip small {
+  font-weight: 500;
+}
+.meal-add {
+  border: 1px dashed var(--line);
+  background: none;
+  border-radius: 10px;
+  padding: 7px 12px;
+  color: var(--muted);
+  font-weight: 650;
+}
+.meal-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (max-width: 640px) {
+  .meal-row {
+    grid-template-columns: 56px repeat(var(--slots), minmax(0, 1fr));
+    gap: 6px;
+  }
 }

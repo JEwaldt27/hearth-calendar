@@ -46,6 +46,18 @@ export async function choresFor(userId, day) {
   );
 }
 
+const SLOT_ORDER = { breakfast: 1, lunch: 2, dinner: 3, snack: 4 };
+
+/** Today's planned meals from meal-plan lists the user can see. */
+export async function mealsFor(userId, day) {
+  const lists = (await accessibleLists(userId)).filter((l) => l.kind === 'meals');
+  if (!lists.length) return [];
+  const rows = await many('SELECT title, meal_slot FROM list_items WHERE list_id = ANY($1) AND due_date = $2', [lists.map((l) => l.id), day.toISODate()]);
+  return rows.sort((a, b) => (SLOT_ORDER[a.meal_slot] || 9) - (SLOT_ORDER[b.meal_slot] || 9));
+}
+
+const slotName = (slot) => (slot ? slot.charAt(0).toUpperCase() + slot.slice(1) : 'Meal');
+
 function timeLabel(ev) {
   if (ev.allDay) return 'All day';
   return DateTime.fromISO(ev.start).setZone(config.defaultTimezone).toLocaleString(DateTime.TIME_SIMPLE);
@@ -84,7 +96,8 @@ export async function buildDigest(user, now = DateTime.now().setZone(config.defa
   const today = eventsOn(events, day);
   const next = eventsOn(events, tomorrow);
   const chores = await choresFor(user.id, day);
-  if (!always && !today.length && !next.length && !chores.length) return null;
+  const meals = await mealsFor(user.id, day);
+  if (!always && !today.length && !next.length && !chores.length && !meals.length) return null;
 
   const groups = new Map();
   for (const c of chores) {
@@ -104,15 +117,18 @@ export async function buildDigest(user, now = DateTime.now().setZone(config.defa
         .map(([who, titles]) => `<p style="margin:0 0 8px"><strong>${escapeHtml(who)}</strong><br>${titles.map((t) => `☐ ${escapeHtml(t)}`).join('<br>')}</p>`)
         .join('')}`
     : '';
+  const mealsHtml = meals.length
+    ? `<p style="margin:0 0 12px;padding:10px 12px;background:#faf6f0;border-radius:10px">🍽 ${meals.map((m) => `<strong>${escapeHtml(slotName(m.meal_slot))}:</strong> ${escapeHtml(m.title)}`).join(' &nbsp;·&nbsp; ')}</p>`
+    : '';
   const html = layout(
     `Good morning, ${user.name}`,
-    `<h2 style="font-size:16px;margin:0 0 8px">Today · ${escapeHtml(dayName)}</h2>${eventRowsHtml(today, byId)}
+    `${mealsHtml}<h2 style="font-size:16px;margin:0 0 8px">Today · ${escapeHtml(dayName)}</h2>${eventRowsHtml(today, byId)}
      <h2 style="font-size:16px;margin:18px 0 8px">Tomorrow</h2>${eventRowsHtml(next, byId)}
      ${choresHtml}${button(config.baseUrl, 'Open Hearth')}
      <p style="color:#8f857b;font-size:12px">Turn these emails off in Settings → Profile.</p>`,
   );
   const text =
-    `Good morning, ${user.name}\n\nToday (${dayName}):\n${eventLinesText(today)}\nTomorrow:\n${eventLinesText(next)}` +
+    `Good morning, ${user.name}\n\n${meals.length ? `Meals: ${meals.map((m) => `${slotName(m.meal_slot)}: ${m.title}`).join(', ')}\n\n` : ''}Today (${dayName}):\n${eventLinesText(today)}\nTomorrow:\n${eventLinesText(next)}` +
     (chores.length ? `\nChores for today:\n${[...groups].map(([who, titles]) => `  ${who}: ${titles.join(', ')}\n`).join('')}` : '') +
     `\n${config.baseUrl}\n`;
   return { subject, html, text };

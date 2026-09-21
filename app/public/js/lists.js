@@ -80,6 +80,103 @@ function editItemDialog(item, onChange) {
   );
 }
 
+/** The list's "usuals": tap to add back, and manage the set. */
+async function staplesDialog(list, openItems, onAdded) {
+  const canEdit = list.permission !== 'view';
+  const chips = h('div', { class: 'staples' });
+  const onList = new Set(openItems.map((i) => i.title.toLowerCase()));
+  let staples = (await get(`/lists/${list.id}/staples`)).staples;
+  const draw = () => {
+    add(
+      clear(chips),
+      staples.length
+        ? staples.map((st) =>
+            h(
+              'span',
+              { class: `staple${onList.has(st.title.toLowerCase()) ? ' on' : ''}` },
+              h(
+                'button',
+                {
+                  class: 'staple-add',
+                  disabled: !canEdit || onList.has(st.title.toLowerCase()),
+                  onclick: async () => {
+                    await post(`/lists/${list.id}/items`, { title: st.title }).catch((e) => toast(e.message, 'error'));
+                    onList.add(st.title.toLowerCase());
+                    draw();
+                    onAdded();
+                  },
+                },
+                onList.has(st.title.toLowerCase()) ? `✓ ${st.title}` : `+ ${st.title}`,
+              ),
+              canEdit
+                ? h(
+                    'button',
+                    {
+                      class: 'staple-remove',
+                      'aria-label': `Remove ${st.title} from usuals`,
+                      onclick: async () => {
+                        await del(`/staples/${st.id}`).catch((e) => toast(e.message, 'error'));
+                        staples = staples.filter((x) => x.id !== st.id);
+                        draw();
+                      },
+                    },
+                    '✕',
+                  )
+                : null,
+            ),
+          )
+        : h('p', { class: 'muted' }, 'No usuals yet. Add the things you buy most weeks.'),
+    );
+  };
+  draw();
+  const input = h('input', { type: 'text', placeholder: 'Add a usual, e.g. Milk', maxlength: 200 });
+  const addForm = h(
+    'form',
+    {
+      class: 'quick-add',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        if (!input.value.trim()) return;
+        staples = (await post(`/lists/${list.id}/staples`, { title: input.value })).staples;
+        input.value = '';
+        draw();
+      },
+    },
+    input,
+    h('button', { class: 'btn', type: 'submit' }, 'Save'),
+  );
+  const addAll = h('button', { class: 'btn ghost' }, 'Add all usuals to the list');
+  addAll.addEventListener(
+    'click',
+    busy(addAll, async () => {
+      for (const st of staples) {
+        if (!onList.has(st.title.toLowerCase())) {
+          await post(`/lists/${list.id}/items`, { title: st.title });
+          onList.add(st.title.toLowerCase());
+        }
+      }
+      draw();
+      onAdded();
+    }),
+  );
+  const saveCurrent = h('button', { class: 'btn ghost' }, 'Save what’s on the list as usuals');
+  saveCurrent.addEventListener(
+    'click',
+    busy(saveCurrent, async () => {
+      if (!openItems.length) throw new Error('The list is empty.');
+      staples = (await post(`/lists/${list.id}/staples`, { titles: openItems.map((i) => i.title) })).staples;
+      draw();
+      toast('Saved as usuals');
+    }),
+  );
+  modal({
+    title: `${list.name} · usuals`,
+    wide: true,
+    content: h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Tap one to put it back on the list.'), chips, canEdit ? addForm : null),
+    actions: canEdit ? [saveCurrent, addAll] : [],
+  });
+}
+
 /** Shared grocery / to-do checklists. */
 export async function renderListsPage(main, app) {
   let items = [];
@@ -139,6 +236,7 @@ export async function renderListsPage(main, app) {
     );
   }
 
+  let showWho = false;
   function itemRow(item, canEdit) {
     return h(
       'li',
@@ -164,7 +262,14 @@ export async function renderListsPage(main, app) {
         },
         '✓',
       ),
-      h('button', { class: 'item-title', disabled: !canEdit, onclick: () => editItemDialog(item, refresh) }, item.title),
+      h(
+        'button',
+        { class: 'item-title', disabled: !canEdit, onclick: () => editItemDialog(item, refresh) },
+        h('span', {}, item.title),
+        showWho && (item.done ? item.completedByName : item.createdByName)
+          ? h('small', { class: 'item-who' }, item.done ? `✓ ${item.completedByName}` : `added by ${item.createdByName}`)
+          : null,
+      ),
       canEdit
         ? h(
             'button',
@@ -190,6 +295,7 @@ export async function renderListsPage(main, app) {
       return;
     }
     const canEdit = list.permission !== 'view';
+    showWho = !list.isOwner || Boolean(list.shares?.length);
     const mine = items.filter((i) => i.listId === list.id);
     const open = mine.filter((i) => !i.done);
     const checked = mine.filter((i) => i.done);
@@ -302,6 +408,7 @@ export async function renderListsPage(main, app) {
           h('h2', {}, list.name),
           h('small', { class: 'muted' }, list.isOwner ? (list.shares?.length ? `Shared with ${list.shares.map((s) => s.name).join(', ')}` : 'Only you') : `Shared by ${list.ownerName}${canEdit ? '' : ' · view only'}`),
         ),
+        h('button', { class: 'btn ghost', onclick: () => staplesDialog(list, open, refresh).catch((e) => toast(e.message, 'error')) }, '★ Usuals'),
         list.isOwner ? h('button', { class: 'btn ghost', onclick: () => shareDialog('list', list, () => reloadLists()) }, 'Share') : null,
         menu,
       ),

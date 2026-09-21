@@ -10,6 +10,7 @@ import calendarRoutes from './routes/calendars.js';
 import displayRoutes from './routes/displays.js';
 import eventRoutes from './routes/events.js';
 import householdRoutes from './routes/household.js';
+import rewardRoutes from './routes/rewards.js';
 import { feedApi, serveFeed } from './routes/feeds.js';
 import listRoutes from './routes/lists.js';
 import memberRoutes from './routes/members.js';
@@ -58,6 +59,7 @@ api.use(displayRoutes);
 api.use(feedApi);
 api.use(pushRoutes);
 api.use(householdRoutes);
+api.use(rewardRoutes);
 api.use((_req, _res, next) => {
   const err = new Error('Not found');
   err.status = 404;

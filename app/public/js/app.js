@@ -1,8 +1,9 @@
 import { get, post, put } from './api.js';
 import { dayEvents, eventCard, renderCalendar, shiftDate, viewRange, viewTitle } from './calendar-view.js';
-import { openChoreEditor, renderChoreBoard, toggleItem } from './chores.js';
+import { openChoreEditor, openRewards, renderChoreBoard, toggleItem } from './chores.js';
 import { openEventDetails, openEventEditor } from './event-editor.js';
 import { renderListsPage } from './lists.js';
+import { renderMealsPage } from './meals.js';
 import { canPromptInstall, maybeShowIosHint, onInstallAvailabilityChange, promptInstall, registerServiceWorker } from './pwa.js';
 import { renderSettings } from './settings.js';
 import { add, addDays, avatar, clear, fmtDate, h, modal, parseYmd, sameDay, toast, ymd } from './util.js';
@@ -67,6 +68,7 @@ function renderChrome() {
         ['calendar', 'Calendar'],
         ['chores', 'Chores'],
         ['lists', 'Lists'],
+        ['meals', 'Meals'],
         ['settings', 'Settings'],
       ].map(([id, label]) => h('a', { href: `#${id}`, class: tab === id ? 'active' : '' }, label)),
     ),
@@ -276,10 +278,12 @@ const choreLists = () => state.lists.filter((l) => l.kind !== 'checklist');
 async function renderChoresPage() {
   const title = h('h1', { class: 'page-title' });
   const root = h('div', { class: 'chores-root' });
+  let stars = {};
   const refresh = async () => {
     try {
-      const { items } = await get(`/items?day=${state.choreDay}`);
+      const [{ items }, starRes] = await Promise.all([get(`/items?day=${state.choreDay}`), get('/stars')]);
       state.items = items;
+      stars = starRes.balances;
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -294,9 +298,11 @@ async function renderChoresPage() {
       items: state.items,
       lists: choreLists(),
       members: state.members,
+      stars,
       day: state.choreDay,
       onToggle: async (item, done, button) => {
         await toggleItem(item, done, state.choreDay, button).catch(() => {});
+        stars = (await get('/stars').catch(() => ({ balances: stars }))).balances;
         draw();
       },
       onEdit: (item) => openChoreEditor(editorCtx({ item })),
@@ -316,6 +322,7 @@ async function renderChoresPage() {
       h('button', { class: 'icon-btn', 'aria-label': 'Next day', onclick: () => go(1) }, '›'),
       title,
       h('span', { class: 'grow' }),
+      h('button', { class: 'btn', onclick: () => openRewards({ members: state.members, onChange: refresh }).catch((e) => toast(e.message, 'error')) }, '⭐ Rewards'),
       h('button', { class: 'btn primary', onclick: () => openChoreEditor(editorCtx()) }, '+ Chore'),
     ),
     choreLists().length ? root : h('div', { class: 'card pad' }, h('p', {}, 'You have no chore lists.'), h('a', { class: 'btn primary', href: '#settings/lists' }, 'Create a list')),
@@ -335,6 +342,7 @@ function route() {
   const [tab, section] = path.split('/');
   if (tab === 'chores') renderChoresPage();
   else if (tab === 'lists') renderListsPage(clear(main), app).then((refresh) => (pageRefresh = refresh));
+  else if (tab === 'meals') renderMealsPage(clear(main), app).then((refresh) => (pageRefresh = refresh));
   else if (tab === 'settings') renderSettings(clear(main), app, section, new URLSearchParams(query));
   else renderCalendarPage();
 }

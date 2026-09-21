@@ -34,6 +34,8 @@ const state = {
   members: [],
   lists: [],
   checklists: [],
+  mealLists: [],
+  stars: null,
   events: [],
   upcoming: [],
   lastWeather: 0,
@@ -155,6 +157,7 @@ function drawChores() {
     items: state.items,
     lists: state.lists,
     members: state.members,
+    stars: state.stars,
     day: state.today,
     compact: true,
     onToggle: async (item, done, button) => {
@@ -162,6 +165,36 @@ function drawChores() {
       drawChores();
     },
   });
+}
+
+const SLOT_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+const SLOT_ORDER = { breakfast: 1, lunch: 2, dinner: 3, snack: 4 };
+
+/** Today's and tomorrow's planned meals. */
+function drawMeals() {
+  if (!els.mealsBox) return;
+  const mealListIds = new Set(state.mealLists.map((l) => l.id));
+  const meals = state.items.filter((i) => mealListIds.has(i.listId));
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const days = [
+    ['Today', state.today],
+    ['Tomorrow', ymd(tomorrow)],
+  ];
+  add(
+    clear(els.mealsBox),
+    days.map(([label, key]) => {
+      const here = meals.filter((m) => m.dueDate === key).sort((a, b) => (SLOT_ORDER[a.mealSlot] || 9) - (SLOT_ORDER[b.mealSlot] || 9));
+      return h(
+        'div',
+        { class: 'd-meal-day' },
+        h('strong', {}, label),
+        here.length
+          ? here.map((m) => h('div', { class: 'd-meal' }, h('span', { class: 'muted' }, SLOT_NAMES[m.mealSlot] || 'Meal'), h('span', {}, m.title)))
+          : h('div', { class: 'd-meal muted' }, 'Nothing planned'),
+      );
+    }),
+  );
 }
 
 /** Grocery / to-do lists on the side panel: tap to check off, optional quick add. */
@@ -292,7 +325,11 @@ async function refreshAll() {
     state.members = m.members;
     state.lists = l.lists.filter((list) => list.kind !== 'checklist');
     state.checklists = l.lists.filter((list) => list.kind === 'checklist');
-    if (state.settings.showChores || state.settings.showLists) state.items = (await get(`/items?display=1&day=${state.today}`)).items;
+    state.mealLists = l.lists.filter((list) => list.kind === 'meals');
+    state.lists = l.lists.filter((list) => list.kind === 'chores');
+    const s = state.settings;
+    if (s.showChores || s.showLists || s.showMeals) state.items = (await get(`/items?display=1&day=${state.today}`)).items;
+    if (s.showChores) state.stars = (await get('/stars').catch(() => ({ balances: null }))).balances;
     els.status.hidden = true;
   } catch (err) {
     handleError(err);
@@ -309,6 +346,7 @@ async function refreshAll() {
   drawChips();
   const typing = els.listsBox?.contains(document.activeElement) && document.activeElement.value;
   drawChores();
+  drawMeals();
   if (!typing) drawChecklists();
   await refreshEvents();
 }
@@ -369,14 +407,16 @@ function build() {
       label,
     ),
   );
-  if (s.showChores || s.showLists) {
+  if (s.showChores || s.showLists || s.showMeals) {
     els.choreBoard = s.showChores ? h('div', {}) : null;
     els.listsBox = s.showLists ? h('div', { class: 'd-lists' }) : null;
+    els.mealsBox = s.showMeals ? h('div', { class: 'd-meals' }) : null;
     els.side = h(
       'aside',
       { class: 'd-chores' },
-      s.showChores ? [h('h2', {}, 'Today’s chores'), els.choreBoard] : null,
-      s.showLists ? [h('h2', { class: s.showChores ? 'd-section-gap' : '' }, 'Lists'), els.listsBox] : null,
+      s.showMeals ? [h('h2', {}, '🍽 Meals'), els.mealsBox] : null,
+      s.showChores ? [h('h2', { class: s.showMeals ? 'd-section-gap' : '' }, 'Today’s chores'), els.choreBoard] : null,
+      s.showLists ? [h('h2', { class: s.showChores || s.showMeals ? 'd-section-gap' : '' }, 'Lists'), els.listsBox] : null,
     );
     els.chores = s.showChores ? els.side : null;
   }

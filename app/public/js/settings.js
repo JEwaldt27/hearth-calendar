@@ -419,6 +419,7 @@ function lists(panel, app) {
       {},
       h('option', { value: 'chores' }, 'Chore chart (people, repeats, due dates)'),
       h('option', { value: 'checklist' }, 'Checklist (groceries, packing, to-dos)'),
+      h('option', { value: 'meals' }, 'Meal plan'),
     );
     const save = h('button', { class: 'btn primary' }, list ? 'Save' : 'Create');
     const m = modal({
@@ -437,7 +438,7 @@ function lists(panel, app) {
     );
   };
   add(panel, 
-    heading('Lists', 'Chore charts show on the Chores tab; checklists (groceries, to-dos) on the Lists tab. Share a list so the whole family can use it.', h('button', { class: 'btn primary', onclick: () => listForm(null) }, '+ New list')),
+    heading('Lists', 'Chore charts show on the Chores tab, checklists (groceries, to-dos) on the Lists tab, and meal plans on the Meals tab. Share a list so the whole family can use it.', h('button', { class: 'btn primary', onclick: () => listForm(null) }, '+ New list')),
     app.state.lists.map((list) =>
       h(
         'div',
@@ -453,7 +454,7 @@ function lists(panel, app) {
             h(
               'div',
               { class: 'row gap-s wrap' },
-              h('span', { class: 'badge' }, list.kind === 'checklist' ? 'Checklist' : 'Chore chart'),
+              h('span', { class: 'badge' }, { checklist: 'Checklist', meals: 'Meal plan' }[list.kind] || 'Chore chart'),
               list.isOwner ? (list.shares?.length ? h('span', { class: 'badge' }, `Shared with ${list.shares.length}`) : null) : h('span', { class: 'badge' }, `Shared by ${list.ownerName} · ${list.permission === 'edit' ? 'can edit' : 'view only'}`),
             ),
           ),
