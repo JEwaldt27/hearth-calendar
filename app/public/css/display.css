@@ -468,3 +468,18 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+.d-countdowns {
+  margin: 0;
+  font-size: 1em;
+}
+.d-calendar .dayview {
+  max-width: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.d-calendar .dv-scroll {
+  flex: 1;
+  height: auto;
+}

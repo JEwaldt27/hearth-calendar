@@ -76,6 +76,18 @@ export function describeRrule(rule) {
   return text;
 }
 
+function birthdayAge(ev, cal) {
+  if (cal?.managed !== 'birthdays') return null;
+  const born = /Born (\d{4})/.exec(ev.description || '');
+  return born ? Number(ev.start.slice(0, 4)) - Number(born[1]) : null;
+}
+
+const SCOPES = {
+  this: { value: 'this', label: 'Only this event' },
+  following: { value: 'following', label: 'This and following events' },
+  all: { value: 'all', label: 'All events in the series' },
+};
+
 /** Read-only popover for an occurrence with Edit / Delete when allowed. */
 export function openEventDetails(ev, ctx) {
   const cal = ctx.calendarsById.get(ev.calendarId);
@@ -91,7 +103,9 @@ export function openEventDetails(ev, ctx) {
       ev.rrule || ev.recurring ? h('p', { class: 'muted' }, `↻ ${describeRrule(ev.rrule) || 'Part of a repeating series'}`) : null,
       h('p', { class: 'details-cal' }, h('span', { class: 'dot', style: { background: color } }), cal ? cal.name : 'Calendar', member && member.name !== cal?.name ? ` · ${member.name}` : '', cal && !cal.isOwner ? ` · shared by ${cal.ownerName}` : ''),
       ev.location ? h('p', {}, '📍 ', ev.location) : null,
-      ev.description ? h('p', { class: 'details-notes' }, ev.description) : null,
+      birthdayAge(ev, cal) ? h('p', {}, `🎉 Turns ${birthdayAge(ev, cal)}`) : null,
+      ev.description && !(cal?.managed === 'birthdays') ? h('p', { class: 'details-notes' }, ev.description) : null,
+      cal?.managed === 'birthdays' ? h('p', { class: 'hint' }, 'Birthdays come from Settings → Family members.') : null,
       cal && !cal.writable ? h('p', { class: 'hint' }, cal.source === 'ics' ? 'This calendar is a read-only subscription.' : 'You have view-only access to this calendar.') : null,
     ),
     actions: canEdit
@@ -106,10 +120,7 @@ export function openEventDetails(ev, ctx) {
 async function deleteFlow(ev, ctx, parentModal) {
   let scope = 'all';
   if (ev.recurring) {
-    scope = await choose('Delete repeating event', null, [
-      { value: 'this', label: 'Only this event' },
-      { value: 'all', label: 'All events in the series', danger: true },
-    ]);
+    scope = await choose('Delete repeating event', null, [SCOPES.this, SCOPES.following, { ...SCOPES.all, danger: true }]);
     if (!scope) return;
   } else if (!(await confirmDialog(`Delete “${ev.title}”?`, { okLabel: 'Delete', danger: true }))) {
     return;
@@ -144,6 +155,15 @@ export function openEventEditor(ctx) {
     allDay = ev.allDay;
     startDate = b.start;
     endDate = ev.allDay ? addDays(b.end, -1) : b.end;
+  } else if (ctx.draft) {
+    // Pre-filled from quick add.
+    allDay = ctx.draft.allDay;
+    startDate = ctx.draft.start;
+    endDate = ctx.draft.allDay ? addDays(ctx.draft.end, -1) : ctx.draft.end;
+  } else if (ctx.startAt) {
+    // A time slot tapped in the day view.
+    startDate = new Date(ctx.startAt);
+    endDate = new Date(startDate.getTime() + 3600000);
   } else {
     const base = ctx.date ? new Date(ctx.date) : new Date();
     const now = new Date();
@@ -153,18 +173,19 @@ export function openEventEditor(ctx) {
     allDay = Boolean(ctx.allDay);
   }
 
-  const title = h('input', { type: 'text', value: ev?.title || '', placeholder: 'What’s happening?', maxlength: 500, required: true });
+  const title = h('input', { type: 'text', value: ev?.title || ctx.draft?.title || '', placeholder: 'What’s happening?', maxlength: 500, required: true });
   const calendar = h(
     'select',
     {},
-    writable.map((c) => h('option', { value: c.id, selected: c.id === (ev?.calendarId || ctx.defaultCalendarId) }, c.isOwner ? c.name : `${c.name} (${c.ownerName})`)),
+    writable.map((c) => h('option', { value: c.id, selected: c.id === (ev?.calendarId || ctx.draft?.calendarId || ctx.defaultCalendarId) }, c.isOwner ? c.name : `${c.name} (${c.ownerName})`)),
   );
   const allDayInput = h('input', { type: 'checkbox', checked: allDay });
   const startDay = h('input', { type: 'date', value: ymd(startDate), required: true });
   const startTime = h('input', { type: 'time', value: hm(startDate), step: 300 });
   const endDay = h('input', { type: 'date', value: ymd(endDate), required: true });
   const endTime = h('input', { type: 'time', value: hm(endDate), step: 300 });
-  const location = h('input', { type: 'text', value: ev?.location || '', placeholder: 'Add a place', maxlength: 500 });
+  const location = h('input', { type: 'text', value: ev?.location || ctx.draft?.location || '', placeholder: 'Add a place', maxlength: 500 });
+  const countdown = h('input', { type: 'checkbox', checked: Boolean(ev?.countdown) });
   const notes = h('textarea', { rows: 3, placeholder: 'Notes', maxlength: 10000 }, ev?.description || '');
 
   // Keep the end after the start as the start moves.
@@ -191,7 +212,7 @@ export function openEventEditor(ctx) {
   allDayInput.addEventListener('change', syncAllDay);
 
   // Repeat controls
-  const rule = parseRrule(ev?.rrule);
+  const rule = parseRrule(ev ? ev.rrule : ctx.draft?.rrule);
   const freq = h(
     'select',
     {},
@@ -269,6 +290,7 @@ export function openEventEditor(ctx) {
     endsRow,
     field('Location', location),
     field('Notes', notes),
+    h('label', { class: 'check' }, countdown, ' Show a countdown to this (“🏖️ Beach trip in 12 days”)'),
   );
   syncAllDay();
   syncRepeat();
@@ -301,6 +323,7 @@ export function openEventEditor(ctx) {
         tzid: localZone(),
         start: isAllDay ? ymd(s) : s.toISOString(),
         end: isAllDay ? ymd(addDays(e, 1)) : e.toISOString(),
+        countdown: countdown.checked,
         rrule: buildRrule(
           {
             freq: freq.value,
@@ -321,11 +344,8 @@ export function openEventEditor(ctx) {
       } else {
         let scope = 'all';
         const ruleChanged = (body.rrule || null) !== (ev.rrule || null);
-        if (ev.recurring && body.calendarId === ev.calendarId && !ruleChanged) {
-          scope = await choose('Edit repeating event', null, [
-            { value: 'this', label: 'Only this event' },
-            { value: 'all', label: 'All events in the series' },
-          ]);
+        if (ev.recurring && body.calendarId === ev.calendarId) {
+          scope = await choose('Edit repeating event', null, ruleChanged ? [SCOPES.following, SCOPES.all] : [SCOPES.this, SCOPES.following, SCOPES.all]);
           if (!scope) return;
         }
         if (scope === 'this' || (ev.recurring && !ev.rrule)) delete body.rrule;

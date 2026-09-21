@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEvent, deleteEvent, listOccurrences, loadEventForWrite, updateEvent } from '../calendar/store.js';
+import { createEvent, deleteEvent, listOccurrences, loadEventForWrite, searchEvents, upcomingCountdowns, updateEvent } from '../calendar/store.js';
 import { one } from '../db.js';
 import { accessibleCalendars, assertUuid, calendarAccess } from '../lib/access.js';
 import { requireAuth } from '../lib/auth.js';
@@ -29,6 +29,20 @@ router.get('/events', requireAuth, async (req, res) => {
   res.json({ events: await listOccurrences(calendars.map((c) => c.id), from, to) });
 });
 
+async function visibleCalendarIds(req) {
+  let calendars = await accessibleCalendars(req.user.id);
+  calendars = req.display || req.query.display === '1' ? calendars.filter((c) => c.on_display) : calendars.filter((c) => c.visible);
+  return calendars.map((c) => c.id);
+}
+
+router.get('/search', requireAuth, async (req, res) => {
+  res.json({ events: await searchEvents(await visibleCalendarIds(req), req.query.q) });
+});
+
+router.get('/countdowns', requireAuth, async (req, res) => {
+  res.json({ events: await upcomingCountdowns(await visibleCalendarIds(req)) });
+});
+
 router.post('/events', requireAuth, async (req, res) => {
   const calendar = await writableCalendar(req, req.body.calendarId);
   const created = await createEvent(calendar, req.body);
@@ -55,7 +69,8 @@ router.patch('/events/:id', requireAuth, async (req, res) => {
 router.delete('/events/:id', requireAuth, async (req, res) => {
   const row = await loadEventForWrite(assertUuid(req.params.id, 'event'));
   const calendar = await writableCalendar(req, row.calendar_id);
-  await deleteEvent(calendar, row, { scope: req.query.scope === 'this' ? 'this' : 'all', occurrence: req.query.occurrence });
+  const scope = ['this', 'following'].includes(req.query.scope) ? req.query.scope : 'all';
+  await deleteEvent(calendar, row, { scope, occurrence: req.query.occurrence });
   res.json({ ok: true });
 });
 

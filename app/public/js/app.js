@@ -1,4 +1,5 @@
 import { get, post, put } from './api.js';
+import { drawCountdowns, moveEvent, openSearch, quickAddBar } from './calendar-extras.js';
 import { dayEvents, eventCard, renderCalendar, shiftDate, viewRange, viewTitle } from './calendar-view.js';
 import { openChoreEditor, openRewards, renderChoreBoard, toggleItem } from './chores.js';
 import { openEventDetails, openEventEditor } from './event-editor.js';
@@ -59,7 +60,7 @@ function currentTab() {
 
 function renderChrome() {
   const tab = currentTab();
-  add(clear(topbar), 
+  add(clear(topbar),
     h('a', { class: 'brand', href: '#calendar' }, h('span', { class: 'brand-mark' }, '◐'), 'Hearth'),
     h(
       'nav',
@@ -145,7 +146,7 @@ function memberChips(onChange) {
   if (!people.length) return null;
   const chipsEl = h('div', { class: 'chips' });
   const draw = () => {
-    add(clear(chipsEl), 
+    add(clear(chipsEl),
       h('button', { class: `chip${state.memberFilter.size ? '' : ' on'}`, onclick: () => (state.memberFilter.clear(), persist(), draw(), onChange()) }, 'Everyone'),
       people.map((m) =>
         h(
@@ -201,6 +202,7 @@ function calendarMenu(onChange) {
 async function renderCalendarPage() {
   const title = h('h1', { class: 'page-title' });
   const root = h('div', { class: 'calendar-root' });
+  const countdowns = h('div', { class: 'countdowns', hidden: true });
   const draw = () => {
     const ctx = eventContext(refresh);
     title.textContent = viewTitle(state.view, state.date, state.weekStartsOn);
@@ -212,6 +214,10 @@ async function renderCalendarPage() {
       weekStartsOn: state.weekStartsOn,
       onEvent: (ev) => openEventDetails(ev, ctx),
       onDay: (day, more) => (state.view === 'month' || more ? daySheet(day, ctx) : openEventEditor({ ...ctx, date: day })),
+      onSlot: (startAt) => openEventEditor({ ...ctx, startAt }),
+      // Drag an event to another day (computers only; touch screens use Edit).
+      canMove: (ev) => Boolean(ctx.calendarsById.get(ev.calendarId)?.writable) && !window.matchMedia('(pointer: coarse)').matches,
+      onMove: (ev, day) => moveEvent(ev, day, ctx),
     });
   };
   const refresh = async () => {
@@ -221,6 +227,8 @@ async function renderCalendarPage() {
       toast(err.message, 'error');
     }
     draw();
+    const ctx = eventContext(refresh);
+    drawCountdowns(countdowns, ctx.colorFor);
   };
   const go = (dir) => {
     state.date = dir === 0 ? new Date() : shiftDate(state.view, state.date, dir);
@@ -232,6 +240,7 @@ async function renderCalendarPage() {
     [
       ['month', 'Month'],
       ['week', 'Week'],
+      ['day', 'Day'],
       ['agenda', 'Schedule'],
     ].map(([v, label]) =>
       h(
@@ -250,7 +259,7 @@ async function renderCalendarPage() {
       ),
     ),
   );
-  add(clear(main), 
+  add(clear(main),
     h(
       'div',
       { class: 'toolbar' },
@@ -260,8 +269,35 @@ async function renderCalendarPage() {
       title,
       h('span', { class: 'grow' }),
       views,
+      h(
+        'button',
+        {
+          class: 'icon-btn',
+          'aria-label': 'Search',
+          title: 'Search',
+          onclick: () =>
+            openSearch(eventContext(refresh), (ev) => {
+              state.date = new Date(ev.allDay ? `${ev.start}T12:00` : ev.start);
+              refresh().then(() => openEventDetails(ev, eventContext(refresh)));
+            }),
+        },
+        '🔍',
+      ),
       h('button', { class: 'btn primary', onclick: () => openEventEditor({ ...eventContext(refresh), date: sameDay(state.date, new Date()) ? null : state.date }) }, '+ Event'),
     ),
+    quickAddBar(
+      () => ({
+        ...eventContext(refresh),
+        onChange: (start) => {
+          // Jump to the new event if it's outside the current view.
+          const { start: from, end: to } = viewRange(state.view, state.date, state.weekStartsOn);
+          if (start && (start < from || start >= to)) state.date = start;
+          refresh();
+        },
+      }),
+      (extra) => openEventEditor({ ...eventContext(refresh), ...extra }),
+    ),
+    countdowns,
     h('div', { class: 'toolbar sub' }, memberChips(draw), h('span', { class: 'grow' }), calendarMenu(draw)),
     root,
   );
@@ -313,7 +349,7 @@ async function renderChoresPage() {
     state.choreDay = n === 0 ? ymd(new Date()) : ymd(addDays(parseYmd(state.choreDay), n));
     refresh();
   };
-  add(clear(main), 
+  add(clear(main),
     h(
       'div',
       { class: 'toolbar' },

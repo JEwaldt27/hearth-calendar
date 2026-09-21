@@ -16,8 +16,9 @@ import {
   removeOverridesAndExdates,
   rowFromComponent,
   rowsFromVcalendar,
+  truncateSeries,
 } from './ical.js';
-import { occurrenceStarts } from './recurrence.js';
+import { buildRule, floating, occurrenceStarts } from './recurrence.js';
 
 const DAY = 86400000;
 export const WRITABLE_SOURCES = new Set(['local', 'caldav', 'google']);
@@ -29,10 +30,10 @@ export async function indexObject(client, calendarId, objectId, vcal) {
   for (const r of rows) {
     await client.query(
       `INSERT INTO events (object_id, calendar_id, recurrence_id, title, description, location,
-                           start_at, end_at, all_day, tzid, rrule, exdates, range_end)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+                           start_at, end_at, all_day, tzid, rrule, exdates, range_end, countdown)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [objectId, calendarId, r.recurrence_id, r.title, r.description, r.location, r.start_at, r.end_at, r.all_day,
-        r.tzid, r.rrule, r.exdates, r.range_end],
+        r.tzid, r.rrule, r.exdates, r.range_end, Boolean(r.countdown)],
     );
   }
 }
@@ -63,7 +64,7 @@ function isoDay(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function serialize(row, start, isOverride) {
+export function serialize(row, start, isOverride = Boolean(row.recurrence_id)) {
   const duration = new Date(row.end_at) - new Date(row.start_at);
   const end = new Date(start.getTime() + duration);
   return {
@@ -79,6 +80,7 @@ function serialize(row, start, isOverride) {
     end: row.all_day ? isoDay(end) : end.toISOString(),
     tzid: row.tzid,
     rrule: row.rrule,
+    countdown: Boolean(row.countdown),
     recurring: Boolean(row.rrule || isOverride),
     occurrence: isOverride ? new Date(row.recurrence_id).toISOString() : start.toISOString(),
   };
@@ -130,6 +132,53 @@ export async function listOccurrences(calendarIds, from, to) {
   }
   out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
   return out;
+}
+
+/** Events whose title, place or notes match `q`: the next upcoming occurrence of each, then past ones. */
+export async function searchEvents(calendarIds, q, now = new Date()) {
+  const term = String(q || '').trim().slice(0, 100);
+  if (!calendarIds.length || term.length < 2) return [];
+  const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const rows = await many(
+    `SELECT * FROM events WHERE calendar_id = ANY($1) AND (title ILIKE $2 OR location ILIKE $2 OR description ILIKE $2)
+      ORDER BY start_at DESC LIMIT 300`,
+    [calendarIds, like],
+  );
+  const results = [];
+  const twoYears = 2 * 365 * DAY;
+  for (const row of rows) {
+    if (row.rrule) {
+      const next = occurrenceStarts(row, now, new Date(now.getTime() + twoYears), 1)[0];
+      if (next) results.push(serialize(row, next, false));
+      else {
+        const past = occurrenceStarts(row, new Date(now.getTime() - twoYears), now);
+        if (past.length) results.push(serialize(row, past[past.length - 1], false));
+      }
+    } else {
+      results.push(serialize(row, new Date(row.start_at)));
+    }
+  }
+  const nowIso = now.toISOString();
+  const upcoming = results.filter((r) => (r.allDay ? `${r.end}T00:00:00.000Z` > nowIso : r.end >= nowIso)).sort((a, b) => (a.start < b.start ? -1 : 1));
+  const past = results.filter((r) => !upcoming.includes(r)).sort((a, b) => (a.start > b.start ? -1 : 1));
+  return [...upcoming, ...past].slice(0, 60);
+}
+
+/** Next occurrence of every event marked "show a countdown", soonest first. */
+export async function upcomingCountdowns(calendarIds, now = new Date()) {
+  if (!calendarIds.length) return [];
+  const since = new Date(now.getTime() - DAY);
+  const rows = await many(
+    'SELECT * FROM events WHERE calendar_id = ANY($1) AND countdown AND (range_end IS NULL OR range_end >= $2)',
+    [calendarIds, since],
+  );
+  const out = [];
+  const horizon = new Date(now.getTime() + 400 * DAY);
+  for (const row of rows) {
+    const next = occurrenceStarts(row, since, horizon, 20).find((s) => s.getTime() + (new Date(row.end_at) - new Date(row.start_at)) > now.getTime() || row.all_day);
+    if (next) out.push(serialize(row, next));
+  }
+  return out.sort((a, b) => (a.start < b.start ? -1 : 1)).slice(0, 8);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +234,14 @@ export function validateEventInput(body, { partial = false } = {}) {
     }
   }
   fields.rrule = cleanRrule(body.rrule);
+  if (body.countdown !== undefined) fields.countdown = Boolean(body.countdown);
   return fields;
 }
 
 function assertWritable(calendar) {
+  if (calendar.managed === 'birthdays') {
+    throw httpError(400, 'Birthdays are added and changed in Settings → Family members.');
+  }
   if (!WRITABLE_SOURCES.has(calendar.source)) {
     throw httpError(400, 'Subscribed ICS feeds are read-only. Link the calendar with CalDAV or Google to edit it here.');
   }
@@ -242,9 +295,50 @@ function objectOf(row) {
   return { id: row.obj_id, href: row.href, etag: row.etag };
 }
 
+/** How many occurrences of a COUNT-limited series fall before `occurrence`. */
+function occurrencesBefore(masterRow, occurrence) {
+  try {
+    const { rule, zone } = buildRule(masterRow);
+    return rule.between(floating(new Date(masterRow.start_at), zone), floating(occurrence, zone), false).length + 1;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * "This and following": ends the original series before `occurrence` and starts a new series
+ * there with the edited details.
+ */
+async function splitSeries(calendar, row, vcal, master, occurrence, fields, body) {
+  const masterRow = rowFromComponent(master, config.defaultTimezone);
+  const duration = masterRow.end_at - masterRow.start_at;
+  let rrule = fields.rrule !== undefined ? fields.rrule : masterRow.rrule;
+  const count = /COUNT=(\d+)/.exec(rrule || '');
+  if (count && fields.rrule === undefined) {
+    const remaining = Number(count[1]) - occurrencesBefore(masterRow, occurrence);
+    rrule = remaining > 0 ? rrule.replace(/COUNT=\d+/, `COUNT=${remaining}`) : null;
+  }
+  const start = fields.start || occurrence;
+  const next = {
+    title: fields.title ?? masterRow.title,
+    description: fields.description ?? masterRow.description ?? '',
+    location: fields.location ?? masterRow.location ?? '',
+    allDay: fields.start ? fields.allDay : masterRow.all_day,
+    tzid: fields.start ? fields.tzid : masterRow.tzid,
+    start,
+    end: fields.end || new Date(start.getTime() + duration),
+    rrule,
+    countdown: fields.countdown ?? masterRow.countdown,
+  };
+  truncateSeries(vcal, occurrence, config.defaultTimezone);
+  await saveResource(calendar, objectOf(row), row.uid, vcal);
+  const uid = `${crypto.randomUUID()}@hearth`;
+  await saveResource(calendar, null, uid, createResource(uid, next));
+}
+
 export async function updateEvent(calendar, row, body) {
   assertWritable(calendar);
-  const scope = body.scope === 'this' ? 'this' : 'all';
+  const scope = ['this', 'following'].includes(body.scope) ? body.scope : 'all';
   const fields = validateEventInput(body, { partial: true });
   const vcal = parseIcs(row.ics);
   const master = findMaster(vcal);
@@ -252,6 +346,10 @@ export async function updateEvent(calendar, row, body) {
   const occurrence = body.occurrence ? parseInstant(body.occurrence, 'Occurrence') : row.start_at ? new Date(row.start_at) : null;
   if (!occurrence && scope === 'this') throw httpError(400, 'Which occurrence should be changed?');
 
+  if (scope === 'following' && recurring && occurrence > new Date(row.start_at)) {
+    await splitSeries(calendar, row, vcal, master, occurrence, fields, body);
+    return;
+  }
   if (scope === 'this' && recurring) {
     delete fields.rrule;
     const target = findOverride(vcal, occurrence, config.defaultTimezone) || addOverride(vcal, occurrence, config.defaultTimezone);
@@ -291,6 +389,14 @@ export async function deleteEvent(calendar, row, { scope, occurrence }) {
   const master = findMaster(vcal);
   const recurring = Boolean(master?.hasProperty('rrule'));
 
+  if (scope === 'following' && recurring && occurrence) {
+    const when = parseInstant(occurrence, 'Occurrence');
+    if (when > new Date(row.start_at)) {
+      truncateSeries(vcal, when, config.defaultTimezone);
+      await saveResource(calendar, objectOf(row), row.uid, vcal);
+      return;
+    }
+  }
   if (scope === 'this' && recurring) {
     if (!occurrence) throw httpError(400, 'Which occurrence should be deleted?');
     const when = parseInstant(occurrence, 'Occurrence');

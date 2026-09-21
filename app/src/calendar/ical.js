@@ -168,6 +168,7 @@ export function rowFromComponent(ve, defaultZone) {
     rrule: ridProp || !recur ? null : recur.toString(),
     exdates,
     cancelled: String(ve.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED',
+    countdown: String(ve.getFirstPropertyValue('x-hearth-countdown') || '').toUpperCase() === 'TRUE',
   };
   row.range_end = computeRangeEnd(row);
   return row;
@@ -330,6 +331,7 @@ export function applyFields(comp, fields) {
     comp.removeAllProperties('rrule');
     if (fields.rrule) comp.addPropertyWithValue('rrule', ICAL.Recur.fromString(fields.rrule));
   }
+  if (fields.countdown !== undefined) setText(comp, 'x-hearth-countdown', fields.countdown ? 'TRUE' : '');
   touch(comp);
 }
 
@@ -351,7 +353,7 @@ export function addOverride(vcal, occurrence, defaultZone) {
   const duration = masterRow.end_at - masterRow.start_at;
   const ve = new ICAL.Component('vevent');
   ve.addPropertyWithValue('uid', master.getFirstPropertyValue('uid'));
-  for (const name of ['summary', 'description', 'location', 'class', 'transp']) {
+  for (const name of ['summary', 'description', 'location', 'class', 'transp', 'x-hearth-countdown']) {
     const value = master.getFirstPropertyValue(name);
     if (value !== null && value !== undefined) ve.addPropertyWithValue(name, value);
   }
@@ -366,6 +368,45 @@ export function addExdate(vcal, occurrence, defaultZone) {
   const master = findMaster(vcal);
   const fmt = startFormat(master, defaultZone);
   master.addProperty(makeTimeProperty('exdate', occurrence, fmt.allDay, fmt.tzid));
+  touch(master);
+}
+
+/**
+ * Ends a series just before `occurrence` ("this and following" edits and deletes): sets UNTIL,
+ * drops COUNT, and removes exceptions and overrides from that point on.
+ */
+export function truncateSeries(vcal, occurrence, defaultZone) {
+  const master = findMaster(vcal);
+  const fmt = startFormat(master, defaultZone);
+  const recur = master.getFirstPropertyValue('rrule');
+  if (fmt.allDay) {
+    const d = new Date(occurrence.getTime() - DAY);
+    recur.until = ICAL.Time.fromData({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(), isDate: true });
+  } else {
+    // RFC 5545: UNTIL must be UTC when DTSTART has a time zone.
+    recur.until = ICAL.Time.fromJSDate(new Date(occurrence.getTime() - 1000), true);
+  }
+  recur.count = null;
+  master.removeAllProperties('rrule');
+  master.addPropertyWithValue('rrule', recur);
+
+  const instant = (prop, value) => (fmt.allDay ? dayFloor(value) : convertTime(value, prop.getParameter('tzid'), defaultZone).date);
+  for (const ve of [...vcal.getAllSubcomponents('vevent')]) {
+    const rid = ve.getFirstProperty('recurrence-id');
+    if (rid && instant(rid, rid.getFirstValue()) >= occurrence) vcal.removeSubcomponent(ve);
+  }
+  for (const prop of [...master.getAllProperties('exdate')]) {
+    const keep = prop.getValues().filter((v) => instant(prop, v) < occurrence);
+    if (keep.length === prop.getValues().length) continue;
+    master.removeProperty(prop);
+    if (keep.length) {
+      const replacement = new ICAL.Property('exdate');
+      const tz = prop.getParameter('tzid');
+      if (tz) replacement.setParameter('tzid', tz);
+      replacement.setValues(keep);
+      master.addProperty(replacement);
+    }
+  }
   touch(master);
 }
 

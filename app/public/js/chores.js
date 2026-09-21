@@ -48,7 +48,7 @@ export function renderChoreBoard(ctx) {
     const done = col.items.filter((i) => i.done).length;
     const member = col.member;
     const pct = col.items.length ? Math.round((done / col.items.length) * 100) : 0;
-    add(board, 
+    add(board,
       h(
         'section',
         { class: 'board-col', style: { '--c': member?.color || '#8d7b6a' } },
@@ -132,7 +132,7 @@ export function openChoreEditor(ctx) {
   const fillMembers = () => {
     const owner = ctx.lists.find((l) => l.id === list.value)?.ownerId;
     const chosen = member.value || item?.memberId || ctx.memberId || '';
-    add(clear(member), 
+    add(clear(member),
       h('option', { value: '' }, 'Anyone'),
       ...ctx.members.filter((m) => m.ownerId === owner).map((m) => h('option', { value: m.id, selected: m.id === chosen }, `${m.emoji ? `${m.emoji} ` : ''}${m.name}`)),
     );

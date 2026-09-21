@@ -134,16 +134,26 @@ function memberForm(member, onSaved) {
   let color = member?.color || PALETTE[Math.floor(Math.random() * PALETTE.length)];
   const name = h('input', { type: 'text', value: member?.name || '', maxlength: 60, placeholder: 'Name' });
   const emoji = h('input', { type: 'text', value: member?.emoji || '', maxlength: 8, placeholder: '🙂', class: 'narrow' });
+  const birthday = h('input', { type: 'date', value: member?.birthday || '' });
+  const yearUnknown = h('input', { type: 'checkbox', checked: member ? member.birthday && !member.birthdayYearKnown : false });
   const save = h('button', { class: 'btn primary' }, member ? 'Save' : 'Add');
   const m = modal({
     title: member ? `Edit ${member.name}` : 'Add family member',
-    content: h('div', { class: 'stack' }, field('Name', name), field('Emoji (optional)', emoji, 'Shown on chores and the wall display.'), field('Colour', colorPicker(color, (c) => (color = c)))),
+    content: h(
+      'div',
+      { class: 'stack' },
+      field('Name', name),
+      field('Emoji (optional)', emoji, 'Shown on chores and the wall display.'),
+      field('Birthday (optional)', birthday, 'Adds a yearly event to your Birthdays calendar.'),
+      h('label', { class: 'check' }, yearUnknown, ' I don’t know the year'),
+      field('Colour', colorPicker(color, (c) => (color = c))),
+    ),
     actions: [h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'), save],
   });
   save.addEventListener(
     'click',
     busy(save, async () => {
-      const body = { name: name.value, emoji: emoji.value, color };
+      const body = { name: name.value, emoji: emoji.value, color, birthday: birthday.value || null, birthdayYearKnown: !yearUnknown.checked };
       if (member) await patch(`/members/${member.id}`, body);
       else await post('/members', body);
       m.close();
@@ -158,7 +168,7 @@ function family(panel, app) {
     app.route();
   };
   const mine = app.state.members.filter((m) => m.mine);
-  add(panel, 
+  add(panel,
     heading('Family members', 'People calendars and chores belong to. Kids don’t need an account.', h('button', { class: 'btn primary', onclick: () => memberForm(null, refresh) }, '+ Add person')),
     h(
       'div',
@@ -169,7 +179,21 @@ function family(panel, app) {
               'div',
               { class: 'list-row' },
               avatar(m),
-              h('div', { class: 'grow' }, h('strong', {}, m.name), h('small', { class: 'muted' }, `${app.state.calendars.filter((c) => c.memberId === m.id).length} calendar(s)`)),
+              h(
+                'div',
+                { class: 'grow' },
+                h('strong', {}, m.name),
+                h(
+                  'small',
+                  { class: 'muted' },
+                  [
+                    `${app.state.calendars.filter((c) => c.memberId === m.id).length} calendar(s)`,
+                    m.birthday ? `🎂 ${new Date(`${m.birthday}T12:00`).toLocaleDateString([], m.birthdayYearKnown ? { month: 'long', day: 'numeric', year: 'numeric' } : { month: 'long', day: 'numeric' })}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                ),
+              ),
               h('button', { class: 'btn ghost', onclick: () => memberForm(m, refresh) }, 'Edit'),
               h(
                 'button',
@@ -196,7 +220,7 @@ export function shareDialog(kind, resource, onChange) {
   const path = kind === 'calendar' ? `/calendars/${resource.id}/shares` : `/lists/${resource.id}/shares`;
   const listEl = h('div', { class: 'list' });
   const draw = (shares) => {
-    add(clear(listEl), 
+    add(clear(listEl),
       shares.length
         ? shares.map((s) =>
             h(
@@ -338,7 +362,7 @@ function calendars(panel, app) {
           h(
             'div',
             { class: 'row gap-s wrap' },
-            h('span', { class: 'badge' }, SOURCE_LABEL[cal.source]),
+            h('span', { class: 'badge' }, cal.managed === 'birthdays' ? 'Automatic · from Family members' : SOURCE_LABEL[cal.source]),
             cal.source === 'caldav' || cal.source === 'google' ? h('span', { class: 'badge accent' }, 'Two-way') : null,
             cal.isOwner ? null : h('span', { class: 'badge' }, `Shared by ${cal.ownerName} · ${cal.permission === 'edit' ? 'can edit' : 'view only'}`),
             member ? h('span', { class: 'badge' }, member.name) : null,
@@ -385,12 +409,13 @@ function calendars(panel, app) {
     );
   });
 
-  add(panel, 
+  add(panel,
     heading(
       'Calendars',
       'Create calendars here, subscribe to links, or link iCloud / Google / CalDAV accounts so changes made here are pushed back.',
       h('button', { class: 'btn primary', onclick: () => calendarForm(app, null, { source: 'local' }) }, '+ New calendar'),
       h('button', { class: 'btn', onclick: () => calendarForm(app, null, { source: 'ics' }) }, '+ Subscribe to link'),
+      h('button', { class: 'btn', onclick: () => holidayDialog(app) }, '+ Holidays'),
       h('button', { class: 'btn', onclick: () => (location.hash = '#settings/accounts') }, '+ Link an account'),
     ),
     h(
@@ -437,7 +462,7 @@ function lists(panel, app) {
       }),
     );
   };
-  add(panel, 
+  add(panel,
     heading('Lists', 'Chore charts show on the Chores tab, checklists (groceries, to-dos) on the Lists tab, and meal plans on the Meals tab. Share a list so the whole family can use it.', h('button', { class: 'btn primary', onclick: () => listForm(null) }, '+ New list')),
     app.state.lists.map((list) =>
       h(
@@ -489,7 +514,7 @@ async function pickRemoteCalendars(app, account, calendarsList) {
   const content = h('div', { class: 'list' });
   const m = modal({ title: `Calendars in ${account.label}`, content, actions: [h('button', { class: 'btn', onclick: () => m.close() }, 'Done')], wide: true });
   const draw = (items) => {
-    add(clear(content), 
+    add(clear(content),
       items.length
         ? items.map((c) =>
             h(
@@ -574,7 +599,7 @@ async function accounts(panel, app, params) {
   add(panel, h('p', { class: 'muted' }, 'Loading…'));
   const { accounts: list, googleEnabled } = await get('/accounts');
   clear(panel);
-  add(panel, 
+  add(panel,
     heading(
       'Linked accounts',
       'Two-way sync: events from these accounts appear in Hearth, and events you create or edit here are written back.',
@@ -778,7 +803,7 @@ function displaySettingsForm(d, onSave) {
 async function displays(panel, app) {
   const { displays: list } = await get('/displays');
   const redraw = () => app.route();
-  add(clear(panel), 
+  add(clear(panel),
     heading(
       'Wall displays',
       'A display is a tablet or screen that shows your family calendar full-screen without signing in.',
@@ -1432,5 +1457,59 @@ async function household(panel) {
       h('p', { class: 'hint' }, 'Weather comes from Open-Meteo (free, no account). Only the location is sent to it.'),
     ),
     h('div', { class: 'card stack' }, field('Temperature units', units)),
+  );
+}
+
+// --- Public holiday calendars ------------------------------------------------------------
+
+const HOLIDAY_CALENDARS = [
+  ['United States', 'en.usa'],
+  ['Canada', 'en.canadian'],
+  ['United Kingdom', 'en.uk'],
+  ['Ireland', 'en.irish'],
+  ['Australia', 'en.australian'],
+  ['New Zealand', 'en.new_zealand'],
+  ['Mexico', 'en.mexican'],
+  ['Brazil', 'en.brazilian'],
+  ['Germany', 'en.german'],
+  ['France', 'en.french'],
+  ['Spain', 'en.spain'],
+  ['Italy', 'en.italian'],
+  ['Netherlands', 'en.dutch'],
+  ['Sweden', 'en.swedish'],
+  ['India', 'en.indian'],
+  ['Philippines', 'en.philippines'],
+  ['Japan', 'en.japanese'],
+  ['South Africa', 'en.sa'],
+  ['Christian holidays', 'en.christian'],
+  ['Jewish holidays', 'en.judaism'],
+  ['Islamic holidays', 'en.islamic'],
+  ['Hindu holidays', 'en.hinduism'],
+];
+
+function holidayDialog(app) {
+  const country = h('select', {}, HOLIDAY_CALENDARS.map(([label, id]) => h('option', { value: id }, label)));
+  const save = h('button', { class: 'btn primary' }, 'Add holidays');
+  const m = modal({
+    title: 'Add a holiday calendar',
+    content: h('div', { class: 'stack' }, field('Holidays for', country), h('p', { class: 'hint' }, 'A read-only calendar of public holidays, kept up to date automatically.')),
+    actions: [h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'), save],
+  });
+  save.addEventListener(
+    'click',
+    busy(save, async () => {
+      const label = country.selectedOptions[0].textContent;
+      const id = `${country.value}#holiday@group.v.calendar.google.com`;
+      await post('/calendars', {
+        source: 'ics',
+        name: label.endsWith('holidays') ? label : `${label} holidays`,
+        color: '#e8594f',
+        url: `https://calendar.google.com/calendar/ical/${encodeURIComponent(id)}/public/basic.ics`,
+      });
+      m.close();
+      toast('Holidays added');
+      await app.reload();
+      app.route();
+    }),
   );
 }

@@ -1,4 +1,5 @@
 import { get, post, setDisplayToken } from './api.js';
+import { drawCountdowns } from './calendar-extras.js';
 import { renderCalendar, shiftDate, viewRange, viewTitle, dayEvents, eventCard } from './calendar-view.js';
 import { renderChoreBoard, toggleItem } from './chores.js';
 import { nightOverlay, photoFrame, upNextStrip, weatherWidget } from './display-extras.js';
@@ -52,7 +53,7 @@ function applyTheme(theme) {
 }
 
 function showSignedOut(message) {
-  add(clear(root), 
+  add(clear(root),
     h(
       'div',
       { class: 'auth-card center' },
@@ -126,7 +127,7 @@ function drawChips() {
   const people = state.members.filter((m) => inUse.has(m.id));
   clear(els.chips);
   if (people.length < 2) return;
-  add(els.chips, 
+  add(els.chips,
     h('button', { class: `chip${state.memberFilter.size ? '' : ' on'}`, onclick: () => (state.memberFilter.clear(), drawChips(), drawCalendar()) }, 'Everyone'),
     people.map((m) =>
       h(
@@ -335,6 +336,7 @@ async function refreshAll() {
     handleError(err);
   }
   await refreshUpcoming();
+  if (els.countdowns) drawCountdowns(els.countdowns, ctx().colorFor, '?display=1');
   if (els.weather && Date.now() - state.lastWeather > 10 * 60000) {
     state.lastWeather = Date.now();
     els.weather.refresh();
@@ -387,6 +389,7 @@ function build() {
   els.status = h('div', { class: 'd-status', hidden: true });
   els.weather = s.showWeather ? weatherWidget() : null;
   els.upNext = s.showUpNext ? upNextStrip() : null;
+  els.countdowns = s.showCountdowns ? h('div', { class: 'countdowns d-countdowns', hidden: true }) : null;
   els.night = s.nightMode ? nightOverlay(s) : null;
   els.photos = s.photoFrame ? photoFrame(s, { idleMs: () => s.photoIdleMinutes * 60000 }) : null;
   els.viewButtons = [
@@ -421,7 +424,7 @@ function build() {
     els.chores = s.showChores ? els.side : null;
   }
 
-  add(clear(root), 
+  add(clear(root),
     h(
       'header',
       { class: 'd-top' },
@@ -437,7 +440,7 @@ function build() {
           : null,
       ),
     ),
-    h('div', { class: 'd-sub' }, els.upNext?.el, els.chips, els.status),
+    h('div', { class: 'd-sub' }, els.upNext?.el, els.countdowns, els.chips, els.status),
     h('div', { class: `d-body${els.side ? ' with-chores' : ''}` }, els.calendar, els.side),
     els.photos?.el,
     els.night?.el,

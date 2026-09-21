@@ -27,12 +27,17 @@ export function viewRange(view, date, weekStartsOn = 0) {
     const start = startOfWeek(date, weekStartsOn);
     return { start, end: addDays(start, 7) };
   }
+  if (view === 'day') {
+    const start = startOfDay(date);
+    return { start, end: addDays(start, 1) };
+  }
   const start = startOfDay(date);
   return { start, end: addDays(start, 14) };
 }
 
 export function viewTitle(view, date, weekStartsOn = 0) {
   if (view === 'month') return fmtDate(date, { month: 'long', year: 'numeric' });
+  if (view === 'day') return fmtDate(date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const { start, end } = viewRange(view, date, weekStartsOn);
   const last = addDays(end, -1);
   const sameMonth = start.getMonth() === last.getMonth();
@@ -41,7 +46,7 @@ export function viewTitle(view, date, weekStartsOn = 0) {
 
 export function shiftDate(view, date, direction) {
   if (view === 'month') return new Date(date.getFullYear(), date.getMonth() + direction, 1);
-  return addDays(date, direction * (view === 'week' ? 7 : 14));
+  return addDays(date, direction * ({ week: 7, day: 1 }[view] || 14));
 }
 
 /** Buckets events into local days: Map<'YYYY-MM-DD', event[]>, all-day first then by start time. */
@@ -64,11 +69,52 @@ export function bucketByDay(events, start, end) {
   return map;
 }
 
+let dragging = null;
+
+/** Lets an event element be dragged to another day (week and month views, on a computer). */
+function makeDraggable(el, ev, ctx) {
+  if (!ctx.onMove || !ctx.canMove?.(ev)) return el;
+  el.draggable = true;
+  el.addEventListener('dragstart', (e) => {
+    dragging = ev;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', ev.id);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => {
+    dragging = null;
+    el.classList.remove('dragging');
+    document.querySelectorAll('.drop-target').forEach((t) => t.classList.remove('drop-target'));
+  });
+  return el;
+}
+
+function makeDropTarget(el, day, ctx) {
+  if (!ctx.onMove) return el;
+  el.addEventListener('dragover', (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    el.classList.add('drop-target');
+  });
+  el.addEventListener('dragleave', (e) => {
+    if (!el.contains(e.relatedTarget)) el.classList.remove('drop-target');
+  });
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('drop-target');
+    const ev = dragging;
+    dragging = null;
+    if (ev) ctx.onMove(ev, day);
+  });
+  return el;
+}
+
 function chip(ev, ctx, { showTime = true } = {}) {
   const color = ctx.colorFor(ev);
   const past = !ev.allDay && ev._end < ctx.now;
   if (ev.allDay) {
-    return h(
+    return makeDraggable(h(
       'button',
       {
         class: `pill solid${past ? ' past' : ''}`,
@@ -80,9 +126,9 @@ function chip(ev, ctx, { showTime = true } = {}) {
         },
       },
       ev.title || '(untitled)',
-    );
+    ), ev, ctx);
   }
-  return h(
+  return makeDraggable(h(
     'button',
     {
       class: `pill${past ? ' past' : ''}`,
@@ -95,7 +141,7 @@ function chip(ev, ctx, { showTime = true } = {}) {
     h('span', { class: 'dot', style: { background: color } }),
     showTime && !ev._continues ? h('span', { class: 'pill-time' }, fmtTime(ev._start)) : null,
     h('span', { class: 'pill-title' }, ev.title || '(untitled)'),
-  );
+  ), ev, ctx);
 }
 
 function renderMonth(root, ctx) {
@@ -107,18 +153,18 @@ function renderMonth(root, ctx) {
   for (let day = start; day < end; day = addDays(day, 1)) {
     const d = day;
     const list = byDay.get(ymd(d)) || [];
-    const cell = h(
+    const cell = makeDropTarget(h(
       'div',
       {
         class: `month-cell${d.getMonth() !== ctx.date.getMonth() ? ' other' : ''}${sameDay(d, ctx.now) ? ' today' : ''}`,
         onclick: () => ctx.onDay(d),
       },
       h('div', { class: 'month-num' }, h('span', {}, d.getDate())),
-    );
+    ), d, ctx);
     const shown = list.length > limit ? list.slice(0, limit - 1) : list;
     for (const ev of shown) add(cell, chip(ev, ctx));
     if (list.length > shown.length) {
-      add(cell, 
+      add(cell,
         h('button', { class: 'more', onclick: (e) => (e.stopPropagation(), ctx.onDay(d, true)) }, `+${list.length - shown.length} more`),
       );
     }
@@ -139,7 +185,7 @@ function eventCard(ev, ctx) {
       : +ev._end === +ev._start
         ? fmtTime(ev._start)
         : `${fmtTime(ev._start)} – ${fmtTime(ev._end)}`;
-  return h(
+  return makeDraggable(h(
     'button',
     {
       class: `card-event${ev.allDay ? ' allday' : ''}${past ? ' past' : ''}`,
@@ -158,7 +204,7 @@ function eventCard(ev, ctx) {
       ev.location ? h('span', { class: 'ce-loc' }, ` · ${ev.location}`) : null,
     ),
     member && !ev.allDay ? h('span', { class: 'ce-member', style: { background: member.color } }, member.emoji || member.name.charAt(0)) : null,
-  );
+  ), ev, ctx);
 }
 
 function renderWeek(root, ctx) {
@@ -168,8 +214,8 @@ function renderWeek(root, ctx) {
   for (let day = start; day < end; day = addDays(day, 1)) {
     const d = day;
     const list = byDay.get(ymd(d)) || [];
-    add(wrap, 
-      h(
+    add(wrap,
+      makeDropTarget(h(
         'section',
         { class: `week-col${sameDay(d, ctx.now) ? ' today' : ''}${d < startOfDay(ctx.now) ? ' before' : ''}`, onclick: () => ctx.onDay(d) },
         h(
@@ -179,7 +225,7 @@ function renderWeek(root, ctx) {
           h('span', { class: 'dn' }, d.getDate()),
         ),
         h('div', { class: 'week-body' }, list.length ? list.map((ev) => eventCard(ev, ctx)) : h('span', { class: 'empty-day' }, '')),
-      ),
+      ), d, ctx),
     );
   }
   add(root, wrap);
@@ -196,7 +242,7 @@ function renderAgenda(root, ctx) {
     const isToday = sameDay(d, ctx.now);
     if (!list.length && !isToday) continue;
     any = true;
-    add(wrap, 
+    add(wrap,
       h(
         'section',
         { class: `agenda-day${isToday ? ' today' : ''}` },
@@ -214,6 +260,102 @@ function renderAgenda(root, ctx) {
   add(root, wrap);
 }
 
+const HOUR_PX = 52;
+
+/** Places overlapping timed events side by side. Returns [{ ev, top, height, col, cols }]. */
+function layoutDay(events, dayStart) {
+  const dayEnd = addDays(dayStart, 1);
+  const items = events
+    .map((ev) => {
+      const s = Math.max(ev._start, dayStart);
+      const e = Math.min(Math.max(ev._end, ev._start.getTime() + 15 * 60000), dayEnd);
+      return { ev, s, e, top: ((s - dayStart) / 3600000) * HOUR_PX, height: Math.max(24, ((e - s) / 3600000) * HOUR_PX - 2) };
+    })
+    .sort((a, b) => a.s - b.s || b.e - a.e);
+  let cluster = [];
+  let clusterEnd = 0;
+  const finish = () => {
+    const cols = Math.max(1, ...cluster.map((i) => i.col + 1));
+    for (const i of cluster) i.cols = cols;
+    cluster = [];
+  };
+  for (const item of items) {
+    if (cluster.length && item.s >= clusterEnd) finish();
+    const used = new Set(cluster.filter((i) => i.e > item.s).map((i) => i.col));
+    let col = 0;
+    while (used.has(col)) col++;
+    item.col = col;
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.e);
+  }
+  if (cluster.length) finish();
+  return items;
+}
+
+function renderDay(root, ctx) {
+  const dayStart = startOfDay(ctx.date);
+  const list = bucketByDay(ctx.events, dayStart, addDays(dayStart, 1)).get(ymd(dayStart)) || [];
+  const allDay = list.filter((ev) => ev.allDay);
+  const timed = list.filter((ev) => !ev.allDay);
+  const grid = h('div', {
+    class: 'dv-grid',
+    style: { height: `${24 * HOUR_PX}px` },
+    onclick: (e) => {
+      if (e.target !== grid && !e.target.classList.contains('dv-hour')) return;
+      const y = e.clientY - grid.getBoundingClientRect().top;
+      const minutes = Math.max(0, Math.min(23.5 * 60, Math.floor((y / HOUR_PX) * 2) * 30));
+      ctx.onSlot?.(new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 0, minutes));
+    },
+  });
+  for (let hr = 0; hr < 24; hr++) {
+    add(grid, h('div', { class: 'dv-hour', style: { top: `${hr * HOUR_PX}px`, height: `${HOUR_PX}px` } }, h('span', { class: 'dv-label' }, hr === 0 ? '' : new Date(2000, 0, 1, hr).toLocaleTimeString([], { hour: 'numeric' }))));
+  }
+  for (const item of layoutDay(timed, dayStart)) {
+    const { ev } = item;
+    const color = ctx.colorFor(ev);
+    const past = ev._end <= ctx.now;
+    add(
+      grid,
+      h(
+        'button',
+        {
+          class: `dv-event${past ? ' past' : ''}`,
+          style: {
+            '--c': color,
+            top: `${item.top}px`,
+            height: `${item.height}px`,
+            left: `calc(58px + (100% - 64px) * ${item.col / item.cols})`,
+            width: `calc((100% - 64px) / ${item.cols} - 4px)`,
+          },
+          onclick: (e) => {
+            e.stopPropagation();
+            ctx.onEvent(ev);
+          },
+        },
+        h('span', { class: 'ce-title' }, ev.title || '(untitled)'),
+        item.height > 34 ? h('span', { class: 'ce-meta' }, `${fmtTime(ev._start)} – ${fmtTime(ev._end)}${ev.location ? ` · ${ev.location}` : ''}`) : null,
+      ),
+    );
+  }
+  if (sameDay(dayStart, ctx.now)) {
+    const minutes = ctx.now.getHours() * 60 + ctx.now.getMinutes();
+    add(grid, h('div', { class: 'dv-now', style: { top: `${(minutes / 60) * HOUR_PX}px` } }));
+  }
+  const scroller = h('div', { class: 'dv-scroll' }, grid);
+  add(
+    root,
+    h(
+      'div',
+      { class: 'dayview' },
+      allDay.length ? h('div', { class: 'dv-allday' }, h('span', { class: 'dv-label' }, 'All day'), h('div', { class: 'dv-allday-list' }, allDay.map((ev) => eventCard(ev, ctx)))) : null,
+      scroller,
+    ),
+  );
+  // Start scrolled to the current time (today) or 7 AM.
+  const focusHour = sameDay(dayStart, ctx.now) ? Math.max(0, ctx.now.getHours() - 1) : 7;
+  requestAnimationFrame(() => (scroller.scrollTop = focusHour * HOUR_PX));
+}
+
 /**
  * Renders a calendar view into `root`.
  * ctx: { view, date, events, calendarsById, membersById, colorFor, onEvent, onDay, weekStartsOn, compact }
@@ -224,6 +366,7 @@ export function renderCalendar(root, ctx) {
   root.dataset.view = full.view;
   if (full.view === 'month') renderMonth(root, full);
   else if (full.view === 'week') renderWeek(root, full);
+  else if (full.view === 'day') renderDay(root, full);
   else renderAgenda(root, full);
 }
 
